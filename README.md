@@ -5,6 +5,8 @@ A zero-dependency local web interface and editing engine for *Test Drive Unlimit
 # WARNING: TOOLKIT EDITS ACTUAL SAVE FILES IN DOCUMENTS FOLDER. CREATE BACKUPS BEFORE ANY OPERATION.
 # WARNING: THIS TOOLKIT IS INTENDED FOR USE ON TDU2 WITH TDUWORLD MOD INSTALLED. CLEAN VERSION OF THE GAME WASN'T TESTED.
 
+I do not condone the use of the Save File Toolkit on online profiles within official or community-developed online modes.
+
 ---
 
 ## Overview
