@@ -10,7 +10,7 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 
 ### Core Capabilities
 - **Player Profile Editing**: Edit Driver Money (up to $999,999,999), Casino Points (up to 999,999,999 Cp), and Overall Player Level (1 to 73).
-- **All-in-One Unlocker**: Unlock all 383 authentic furniture items, all 61 living and garage materials, and the Casino furniture.
+- **All-in-One Furniture Unlocker**: Unlock all 383 authentic furniture items and the Casino furniture.
 - **Garage Showroom & Vehicle Swapping**: View owned properties and parked vehicles across Ibiza and Hawaii. Swap any vehicle to any model from the complete 359-car database.
 - **Performance Tuning**: Adjust individual tuning stages (Acceleration, Top Speed, Braking from Level 0 to 4) or apply one-click maximum tuning per car.
 - **Decrypted Save File Manipulation**: Unpack `DATA`, `KEYMAP`, and `OPTIONS` containers into formatted JSON and raw binary templates in a dedicated `decrypt/` folder, with one-click re-encryption and packaging back to game-ready saves.
@@ -23,7 +23,6 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 ### Prerequisites
 - Windows 7, 8, 10, or 11
 - Python 3.8 or newer installed and available in your system `PATH`
-- No additional libraries or `pip` packages are required
 
 ### Quick Start
 1. Run `Run_WebGUI.bat` (or `Run_WebGUI_Silent.vbs` to run in the background without a persistent console window).
@@ -34,7 +33,7 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 3. In the header profile selector, select your profile and click **Load Profile**.
 4. Use the three dedicated tabs to inspect and edit your game data:
    - **Tab 1: Player Profile Editor**: Update money, casino points, and level, or unlock furniture and decor. Click **Save Profile Changes** to write changes to disk.
-   - **Tab 2: Garage Editor**: Browse owned properties. Use the **Tune** button to set performance stages (0 to 4) or click **Max All (Lvl 4)**. Use the **Swap Car** button to replace a car model.
+   - **Tab 2: Garage Editor**: Browse owned properties and cars. Use the **Tune** button to set performance stages (0 to 4) or click **Max All (Lvl 4)**. Use the **Swap Car** button to replace a car model.
    - **Tab 3: Save Files Manipulation**: Click **Unpack Save to decrypt/** to export human-readable `.json` files. After manual edits, click **Pack from decrypt/ to Game-Ready Save** to re-encrypt and install. Previous versions can be restored at any time from the Backups table.
 
 ---
