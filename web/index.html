@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TDU2 Save File Toolkit</title>
+  <link rel="stylesheet" href="app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div class="app-container">
+
+    <!-- Top Header -->
+    <header class="main-header">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg viewBox="0 0 32 32" class="crown-icon">
+            <path d="M4 24L2 9l8 6 6-9 6 9 8-6-2 15H4z" fill="url(#gold-gradient)" />
+            <circle cx="2" cy="8" r="2" fill="#ffd700" />
+            <circle cx="10" cy="14" r="2" fill="#ffd700" />
+            <circle cx="16" cy="5" r="2.2" fill="#ffd700" />
+            <circle cx="22" cy="14" r="2" fill="#ffd700" />
+            <circle cx="30" cy="8" r="2" fill="#ffd700" />
+            <defs>
+              <linearGradient id="gold-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#ffd700" />
+                <stop offset="50%" stop-color="#e5a93b" />
+                <stop offset="100%" stop-color="#c67d0a" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">TDU2 SAVE FILE TOOLKIT</div>
+          <div class="brand-subtitle">Test Drive Unlimited 2 • Profile, Garage & Save Editor</div>
+        </div>
+      </div>
+
+      <div class="header-status">
+        <div class="status-pill">
+          <span class="status-dot" id="profileStatusDot"></span>
+          <span class="label">PROFILE:</span>
+          <span class="val" id="topProfileName">None Loaded</span>
+        </div>
+        <div class="status-pill">
+          <span class="label">BACKUPS:</span>
+          <span class="val" id="topBackupCount">0</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Profile Selector Bar -->
+    <section class="save-selector-bar">
+      <div class="selector-row">
+        <div class="selector-group">
+          <label for="profileDropdown" class="selector-label">
+            Target Save Profile:
+          </label>
+          <div class="select-wrapper">
+            <select id="profileDropdown" class="custom-select">
+              <option value="">Scanning for profiles...</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btnLoadProfile">
+            Load Profile
+          </button>
+          <button class="btn btn-secondary" id="btnRefreshProfiles" title="Rescan folders">
+            Rescan
+          </button>
+        </div>
+      </div>
+
+      <div class="active-path-display">
+        <span class="path-label">Active Save:</span>
+        <span class="path-value" id="activePathText">No profile selected. Choose a profile from the dropdown and click
+          'Load Profile'.</span>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs (Strictly 3 Tabs) -->
+    <nav class="app-tabs">
+      <button class="tab-btn active" data-tab="tab-profile">
+        Player Profile Editor
+      </button>
+      <button class="tab-btn" data-tab="tab-garage">
+        Garage Editor (<span id="garageTabCount">0</span>)
+      </button>
+      <button class="tab-btn" data-tab="tab-save-tools">
+        Save Files Manipulation
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- ==================== TAB 1: PLAYER PROFILE EDITOR ==================== -->
+      <section class="tab-pane active" id="tab-profile">
+        <div class="pipeline-banner" id="profilePipelineBanner">
+          <div class="banner-title">Active Save Pipeline Notice</div>
+          <div class="banner-body">
+            Editing live save data in: <strong id="bannerPathText">Documents\Eden Games\Test Drive Unlimited
+              2\savegame</strong>.<br>
+            Please ensure Test Drive Unlimited 2 is closed before applying changes. A timestamped safety backup is
+            automatically saved to the <strong>Backups/</strong> folder prior to every save.
+          </div>
+        </div>
+
+        <!-- Standby notice when no profile loaded -->
+        <div class="empty-state-banner" id="emptyProfileBanner">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <div class="empty-text">
+            <strong>No Save Profile Loaded:</strong> Please select your save profile from the dropdown above and click
+            <strong>Load Profile</strong> to view and edit profile data.
+          </div>
+        </div>
+
+        <div class="profile-editor-layout" id="profileLoadedContent">
+          <!-- Main Profile Form -->
+          <div class="glass-card editor-card">
+            <div class="card-header">
+              <h3>Player Overview & Progression</h3>
+              <span class="badge" id="driverBadge">Driver: --</span>
+            </div>
+
+            <!-- Objectives Notice (Feature In Development) -->
+            <div class="objectives-notice-banner">
+              <div class="notice-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                </svg>
+              </div>
+              <div class="notice-text">
+                <strong>Objectives & Event Progression:</strong> Game objectives and license/challenge progressions are
+                currently not editable (module in development for a future release).
+              </div>
+            </div>
+
+            <form id="profileForm" class="editor-form" onsubmit="return false;">
+              <div class="form-grid-3">
+                <div class="form-group">
+                  <label for="inputMoney">Driver Money ($)</label>
+                  <input type="number" id="inputMoney" class="custom-input" min="0" max="999999999"
+                    placeholder="e.g. 50000000">
+                  <div class="input-hint-row">
+                    <span class="input-hint input-hint-muted">Max: $999,999,999</span>
+                    <span class="input-hint" id="moneyFormattedHint">$0</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="inputCasinoPoints">Casino Points (Cp)</label>
+                  <input type="number" id="inputCasinoPoints" class="custom-input" min="0" max="999999999"
+                    placeholder="e.g. 1000000">
+                  <div class="input-hint-row">
+                    <span class="input-hint input-hint-muted">Max: 999,999,999 Cp</span>
+                    <span class="input-hint" id="casinoFormattedHint">0 Cp</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="inputLevel">Overall Player Level (1 - 73)</label>
+                  <input type="number" id="inputLevel" class="custom-input" min="1" max="73" placeholder="73">
+                  <span class="input-hint">Vanilla: 60; Offline DLCs: 63; Online DLCs: 73</span>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" class="btn btn-gold btn-lg" id="btnSaveProfile">
+                  Save Profile Changes
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Furniture & House Decor Unlocker (All-In-One) -->
+          <div class="glass-card editor-card">
+            <div class="card-header">
+              <h3>Furniture & House Interior Decor</h3>
+              <span class="badge" id="furnitureBadge">383 Items • 61 Materials</span>
+            </div>
+
+            <div class="furniture-content">
+              <p class="section-desc">
+                Unlock all authentic catalog furniture items, living & garage materials, and the exclusive Casino VIP
+                furniture set for your residences.
+              </p>
+
+              <div class="stats-row">
+                <div class="stat-mini">
+                  <div class="stat-mini-val" id="statFurnCount">-- / 383</div>
+                  <div class="stat-mini-lbl">Furniture Items</div>
+                </div>
+                <div class="stat-mini">
+                  <div class="stat-mini-val" id="statMatsCount">-- / 61</div>
+                  <div class="stat-mini-lbl">Interior Materials</div>
+                </div>
+                <div class="stat-mini">
+                  <div class="stat-mini-val" id="statCasinoVip">--</div>
+                  <div class="stat-mini-lbl">Casino VIP Suite</div>
+                </div>
+              </div>
+
+              <div class="furniture-actions">
+                <button type="button" class="btn btn-primary btn-lg" id="btnUnlockAllFurniture">
+                  Unlock All Furniture & Materials
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB 2: GARAGE EDITOR ==================== -->
+      <section class="tab-pane" id="tab-garage">
+        <div class="pipeline-banner">
+          <div class="banner-title">Garage Showroom Pipeline Notice</div>
+          <div class="banner-body">
+            Vehicles are organized by genuine player houses currently registered in your savegame.
+            Tuning vehicles or swapping vehicle models immediately writes changes to the active save and creates a
+            dedicated backup in <strong>Backups/</strong>.
+          </div>
+        </div>
+
+        <div class="garage-toolbar">
+          <div class="island-filters">
+            <button class="filter-pill active" data-island="all" id="filterAll">All Houses (<span
+                id="countAllHouses">0</span>)</button>
+            <button class="filter-pill" data-island="Ibiza" id="filterIbiza">Ibiza (<span
+                id="countIbizaHouses">0</span>)</button>
+            <button class="filter-pill" data-island="Hawaii" id="filterHawaii">Hawaii (<span
+                id="countHawaiiHouses">0</span>)</button>
+          </div>
+
+          <div class="search-wrap">
+            <input type="text" id="garageSearchInput" class="custom-input"
+              placeholder="Search by brand, car model, or house name...">
+          </div>
+        </div>
+
+        <div class="garage-houses-container" id="garageHousesContainer">
+          <!-- House sections populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- ==================== TAB 3: SAVE FILES MANIPULATION ==================== -->
+      <section class="tab-pane" id="tab-save-tools">
+        <div class="pipeline-banner">
+          <div class="banner-title">Save Container Engine (DES-CBC • Eden-SHA1)</div>
+          <div class="banner-body">
+            Unpack savegame containers to human-readable JSON files, pack modified JSON back into valid encrypted saves,
+            or manage your automatic timestamped backups.
+          </div>
+        </div>
+
+        <div class="tools-grid">
+          <!-- Save File Operations Card -->
+          <div class="glass-card tool-card">
+            <div class="card-header">
+              <h3>Save Operations</h3>
+            </div>
+            <div class="tool-card-body">
+              <p class="section-desc">
+                Unpacking your save will decrypt <strong>DATA</strong>, <strong>KEYMAP</strong>, and
+                <strong>OPTIONS</strong> and place human-readable <code>.json</code> and raw <code>.dec</code> files
+                directly into the <strong><code>decrypt/</code></strong> folder in the Toolkit root directory.<br><br>
+                Once modified, click <strong>Pack from decrypt/ to Game-Ready Save</strong> to compile and re-encrypt
+                everything back into game-ready saves with authentic signatures and safety backups.
+              </p>
+              <div class="decrypt-folder-pill">
+                <span class="pill-label">Decrypted Files Destination:</span>
+                <code class="pill-path" id="decryptFolderPath">&lt;Toolkit_Root&gt;\decrypt\</code>
+              </div>
+              <div class="btn-cluster">
+                <button class="btn btn-secondary" id="btnUnpackSave">
+                  Unpack Save to decrypt/
+                </button>
+                <button class="btn btn-secondary" id="btnPackSave">
+                  Pack from decrypt/ to Game-Ready Save
+                </button>
+                <button class="btn btn-primary" id="btnCreateManualBackup">
+                  Create Timestamped Backup
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Organized Backups Manager -->
+          <div class="glass-card tool-card backups-manager-card">
+            <div class="card-header">
+              <h3>Dedicated Backups Manager</h3>
+              <span class="badge" id="backupsTotalBadge">0 Backups</span>
+            </div>
+            <div class="tool-card-body">
+              <p class="section-desc">
+                Safety backups are organized in the toolkit root under <code>Backups/&lt;Profile&gt;/</code>.
+              </p>
+              <div class="backups-table-wrap">
+                <table class="backups-table" id="backupsTable">
+                  <thead>
+                    <tr>
+                      <th>Filename</th>
+                      <th>Operation</th>
+                      <th>Date & Time</th>
+                      <th>Size</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="backupsTableBody">
+                    <tr>
+                      <td colspan="5" class="table-empty">No backups recorded for this profile yet.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Collapsible Diagnostic Console / Event Log Drawer -->
+    <section class="console-drawer" id="consoleDrawer">
+      <div class="console-header" id="consoleHeader">
+        <div class="console-title">
+          <span class="console-dot" id="consoleStatusDot"></span>
+          <span>Diagnostic Console & Event Log</span>
+          <span class="badge" id="consoleCountBadge">0 events</span>
+        </div>
+        <div class="console-controls">
+          <button class="btn btn-xs btn-secondary" id="btnCopyConsoleLog">Copy Log for Developer</button>
+          <button class="btn btn-xs btn-secondary" id="btnClearConsoleLog">Clear</button>
+          <span class="console-toggle-icon" id="consoleToggleIcon">▲</span>
+        </div>
+      </div>
+      <div class="console-body" id="consoleBody">
+        <div class="console-entries" id="consoleEntries">
+          <!-- Diagnostic logs inserted here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+      <div class="footer-left">
+        <span>TDU2 Save File Toolkit • 100% Self-Contained Offline Engine</span>
+      </div>
+      <div class="footer-right">
+        <span>DES-CBC • Eden-SHA1 Checksum • 359 Identified Vehicles</span>
+      </div>
+    </footer>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h4 id="modalTitle">Confirm Action</h4>
+          <button class="modal-close" id="modalCloseBtn">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody">
+          Are you sure?
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
+          <button class="btn btn-gold" id="modalConfirmBtn">Proceed</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vehicle Catalog Swap Modal -->
+    <div class="modal-overlay" id="catalogModal">
+      <div class="modal-card modal-catalog-card">
+        <div class="modal-header catalog-modal-header">
+          <div>
+            <h4 id="catalogModalTitle">Swap Vehicle Model</h4>
+            <div class="catalog-modal-subtitle" id="catalogModalSubtitle">Target: Garage Slot #1 • Current: Ferrari 250
+              GTO</div>
+          </div>
+          <button class="modal-close" id="catalogModalCloseBtn">&times;</button>
+        </div>
+
+        <div class="catalog-filter-bar">
+          <div class="catalog-search-wrap">
+            <input type="text" id="catalogSearchInput" class="custom-input"
+              placeholder="Search 359 vehicles by brand or model (e.g. Bugatti, Veyron, Enzo, Pagani)...">
+          </div>
+          <select id="catalogBrandFilter" class="custom-select catalog-brand-select">
+            <option value="">All Brands (359 Vehicles)</option>
+          </select>
+        </div>
+
+        <div class="catalog-status-line">
+          <span>Found <strong id="catalogMatchCount">0</strong> vehicles matching search</span>
+          <span class="catalog-hint">Click 'Swap to this Vehicle' on any entry below</span>
+        </div>
+
+        <div class="catalog-list" id="catalogList">
+          <!-- Catalog vehicle items populated by app.js -->
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="catalogCancelBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

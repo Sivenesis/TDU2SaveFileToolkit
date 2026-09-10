@@ -1,0 +1,1236 @@
+{
+  "total_houses": 61,
+  "ibiza_count": 19,
+  "hawaii_count": 42,
+  "houses": [
+    {
+      "id": 6,
+      "name": "Mililani Haven of Peace",
+      "spot_name": "EPH_L1A_1572",
+      "code": "L1A",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 110000,
+      "sell_price": 100000,
+      "windowed_garage": false,
+      "house_hc": 6863821511992542756
+    },
+    {
+      "id": 9,
+      "name": "Black Point House",
+      "spot_name": "EPH_L4B_8814",
+      "code": "L4B",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1289500,
+      "sell_price": 1144750,
+      "windowed_garage": false,
+      "house_hc": 6864106285562431613
+    },
+    {
+      "id": 11,
+      "name": "Lokoea Village",
+      "spot_name": "EPH_L3C_2263",
+      "code": "L3C",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 518500,
+      "sell_price": 508250,
+      "windowed_garage": false,
+      "house_hc": 6864386867136069750
+    },
+    {
+      "id": 15,
+      "name": "Kaakahi Spring",
+      "spot_name": "EPH_L1B_7717",
+      "code": "L1B",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 148000,
+      "sell_price": 139000,
+      "windowed_garage": false,
+      "house_hc": 6864102987077879676
+    },
+    {
+      "id": 19,
+      "name": "Coconut Beach House",
+      "spot_name": "EPH_L3C_7864",
+      "code": "L3C",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 515000,
+      "sell_price": 505500,
+      "windowed_garage": false,
+      "house_hc": 6864386660960601468
+    },
+    {
+      "id": 20,
+      "name": "Loophole Haven of Peace",
+      "spot_name": "EPH_L3A_8646",
+      "code": "L3A",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 415000,
+      "sell_price": 405500,
+      "windowed_garage": false,
+      "house_hc": 6863823934412783734
+    },
+    {
+      "id": 21,
+      "name": "Kaukonahua Home",
+      "spot_name": "EPH_L1A_2267",
+      "code": "L1A",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 113000,
+      "sell_price": 105000,
+      "windowed_garage": false,
+      "house_hc": 6863821511992543451
+    },
+    {
+      "id": 23,
+      "name": "Lanikuhana Village",
+      "spot_name": "EPH_L1B_4512",
+      "code": "L1B",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 144000,
+      "sell_price": 134000,
+      "windowed_garage": false,
+      "house_hc": 6864102987077813366
+    },
+    {
+      "id": 27,
+      "name": "Waimano Home",
+      "spot_name": "EPH_L3A2_5553",
+      "code": "L3A2",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 408000,
+      "sell_price": 398000,
+      "windowed_garage": false,
+      "house_hc": 6863823711015802289
+    },
+    {
+      "id": 28,
+      "name": "Honouliali Village",
+      "spot_name": "EPH_L2B_3614",
+      "code": "L2B",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 222000,
+      "sell_price": 212000,
+      "windowed_garage": false,
+      "house_hc": 6864104086539174521
+    },
+    {
+      "id": 30,
+      "name": "Ko Olina Paradise",
+      "spot_name": "EPH_L4B_2753",
+      "code": "L4B",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1145000,
+      "sell_price": 1072500,
+      "windowed_garage": false,
+      "house_hc": 6864106285545916279
+    },
+    {
+      "id": 32,
+      "name": "Hoomaluhia Paradise",
+      "spot_name": "EPH_L2C_9745",
+      "code": "L2C",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 242000,
+      "sell_price": 232000,
+      "windowed_garage": false,
+      "house_hc": 6864385561499174523
+    },
+    {
+      "id": 33,
+      "name": "Sandy Beach Dream",
+      "spot_name": "EPH_L3C_10810",
+      "code": "L3C",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 502000,
+      "sell_price": 492000,
+      "windowed_garage": false,
+      "house_hc": 6864386660969228858
+    },
+    {
+      "id": 36,
+      "name": "Keolo Hills",
+      "spot_name": "EPH_L2C_9623",
+      "code": "L2C",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 244000,
+      "sell_price": 234000,
+      "windowed_garage": false,
+      "house_hc": 6864385561457599895
+    },
+    {
+      "id": 37,
+      "name": "Puninoni Village",
+      "spot_name": "EPH_L2B_4474",
+      "code": "L2B",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 221000,
+      "sell_price": 212000,
+      "windowed_garage": false,
+      "house_hc": 6864104086480884090
+    },
+    {
+      "id": 38,
+      "name": "Wahiawa Abode",
+      "spot_name": "EPH_L1B_3374",
+      "code": "L1B",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 145000,
+      "sell_price": 135000,
+      "windowed_garage": false,
+      "house_hc": 6864102986969255214
+    },
+    {
+      "id": 40,
+      "name": "Lokelani House",
+      "spot_name": "EPH_L2C_5154",
+      "code": "L2C",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 240000,
+      "sell_price": 230000,
+      "windowed_garage": false,
+      "house_hc": 6864385561457595426
+    },
+    {
+      "id": 42,
+      "name": "Makapu'u Meditation",
+      "spot_name": "EPH_L3A_10744",
+      "code": "L3A",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 388500,
+      "sell_price": 378250,
+      "windowed_garage": false,
+      "house_hc": 6863823711015807480
+    },
+    {
+      "id": 43,
+      "name": "PohaKupu Village",
+      "spot_name": "EPH_L1A_9614",
+      "code": "L1A",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 124000,
+      "sell_price": 114000,
+      "windowed_garage": false,
+      "house_hc": 6863821511992550798
+    },
+    {
+      "id": 50,
+      "name": "Kahuku Point Paradise",
+      "spot_name": "EPH_L4B_5150",
+      "code": "L4B",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1110000,
+      "sell_price": 1055000,
+      "windowed_garage": false,
+      "house_hc": 6864106285504140318
+    },
+    {
+      "id": 54,
+      "name": "Turtle Refuge",
+      "spot_name": "EPH_L2B_5014",
+      "code": "L2B",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 228000,
+      "sell_price": 218000,
+      "windowed_garage": false,
+      "house_hc": 6864104086480884630
+    },
+    {
+      "id": 57,
+      "name": "Lost Keaau House",
+      "spot_name": "EPH_L3A_1410",
+      "code": "L3A",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 402000,
+      "sell_price": 392000,
+      "windowed_garage": false,
+      "house_hc": 6863823711015798146
+    },
+    {
+      "id": 58,
+      "name": "Kalaeokakao Jewel",
+      "spot_name": "EPH_L1B_1407",
+      "code": "L1B",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 140000,
+      "sell_price": 130000,
+      "windowed_garage": false,
+      "house_hc": 6864102986969253247
+    },
+    {
+      "id": 60,
+      "name": "Kaiaka Paradise",
+      "spot_name": "EPH_L2B_4214",
+      "code": "L2B",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 234500,
+      "sell_price": 224000,
+      "windowed_garage": false,
+      "house_hc": 6864104086480883830
+    },
+    {
+      "id": 64,
+      "name": "Waihee Terrace",
+      "spot_name": "EPH_L2B_7512",
+      "code": "L2B",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 238500,
+      "sell_price": 230000,
+      "windowed_garage": false,
+      "house_hc": 6864104086480887128
+    },
+    {
+      "id": 66,
+      "name": "Kaiuapuieho Sun Rise",
+      "spot_name": "EPH_L3C_7540",
+      "code": "L3C",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 509800,
+      "sell_price": 499900,
+      "windowed_garage": false,
+      "house_hc": 6864386660969225588
+    },
+    {
+      "id": 68,
+      "name": "Hui Akikiki Place",
+      "spot_name": "EPH_L1A_8517",
+      "code": "L1A",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 128000,
+      "sell_price": 118000,
+      "windowed_garage": false,
+      "house_hc": 6863821511992549701
+    },
+    {
+      "id": 70,
+      "name": "The Orient",
+      "spot_name": "EPH_L4B_8573",
+      "code": "L4B",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1205500,
+      "sell_price": 1152750,
+      "windowed_garage": false,
+      "house_hc": 6864106285504143741
+    },
+    {
+      "id": 71,
+      "name": "Mokuleia shack",
+      "spot_name": "EPH_L0A_1276",
+      "code": "L0A",
+      "island": "Hawaii",
+      "level": 0,
+      "slots": 2,
+      "buy_price": 38000,
+      "sell_price": 36000,
+      "windowed_garage": true,
+      "house_hc": 6863820412573155958
+    },
+    {
+      "id": 86,
+      "name": "Mineral House",
+      "spot_name": "EPH_L4F_6361",
+      "code": "L4F",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1520000,
+      "sell_price": 1510000,
+      "windowed_garage": true,
+      "house_hc": 6865232185419268987
+    },
+    {
+      "id": 87,
+      "name": "Yacht",
+      "spot_name": "EPH_L5Y_6360",
+      "code": "L5Y",
+      "island": "Hawaii",
+      "level": 5,
+      "slots": 6,
+      "buy_price": 7000000,
+      "sell_price": 6000000,
+      "windowed_garage": false,
+      "house_hc": 6870581309471622011
+    },
+    {
+      "id": 88,
+      "name": "Honolulu loft",
+      "spot_name": "EPH_L3D_7727",
+      "code": "L3D",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 600000,
+      "sell_price": 590000,
+      "windowed_garage": false,
+      "house_hc": 6864668136054622076
+    },
+    {
+      "id": 89,
+      "name": "Kaneohe loft",
+      "spot_name": "EPH_L3D_9500",
+      "code": "L3D",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 601000,
+      "sell_price": 591500,
+      "windowed_garage": false,
+      "house_hc": 6864668135937050231
+    },
+    {
+      "id": 90,
+      "name": "Tropical House",
+      "spot_name": "EPH_L2C_6623",
+      "code": "L2C",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 4,
+      "buy_price": 311000,
+      "sell_price": 301500,
+      "windowed_garage": false,
+      "house_hc": 6864386660969224671
+    },
+    {
+      "id": 91,
+      "name": "Kahuku stilt house",
+      "spot_name": "EPH_L2F_5173",
+      "code": "L2F",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 252000,
+      "sell_price": 242000,
+      "windowed_garage": true,
+      "house_hc": 6865229986429632890
+    },
+    {
+      "id": 92,
+      "name": "Kaneohe stilt house",
+      "spot_name": "EPH_L2F_9520",
+      "code": "L2F",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 251000,
+      "sell_price": 241000,
+      "windowed_garage": true,
+      "house_hc": 6865229986378974590
+    },
+    {
+      "id": 93,
+      "name": "Barber stilt house",
+      "spot_name": "EPH_L2F_3756",
+      "code": "L2F",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 250000,
+      "sell_price": 240000,
+      "windowed_garage": true,
+      "house_hc": 6865229986387725996
+    },
+    {
+      "id": 94,
+      "name": "Loch stilt house",
+      "spot_name": "EPH_L2F_5615",
+      "code": "L2F",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 254000,
+      "sell_price": 244000,
+      "windowed_garage": true,
+      "house_hc": 6865229986387727855
+    },
+    {
+      "id": 95,
+      "name": "Nanakuli loft",
+      "spot_name": "EPH_L3D_2600",
+      "code": "L3D",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 599000,
+      "sell_price": 589500,
+      "windowed_garage": false,
+      "house_hc": 6864668135937049982
+    },
+    {
+      "id": 98,
+      "name": "Falls House",
+      "spot_name": "EPH_L4F_8766",
+      "code": "L4F",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1553250,
+      "sell_price": 1540625,
+      "windowed_garage": true,
+      "house_hc": 6865232185486050166
+    },
+    {
+      "id": 100,
+      "name": "Caravan",
+      "spot_name": "EPH_L0C_1254I",
+      "code": "L0C",
+      "island": "Ibiza",
+      "level": 0,
+      "slots": 2,
+      "buy_price": 28000,
+      "sell_price": 26000,
+      "windowed_garage": false,
+      "house_hc": 6864383676025504374
+    },
+    {
+      "id": 106,
+      "name": "Cala Moli residence",
+      "spot_name": "EPH_L2E_0345I",
+      "code": "L2E",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 283300,
+      "sell_price": 275500,
+      "windowed_garage": true,
+      "house_hc": 6864948824968691833
+    },
+    {
+      "id": 107,
+      "name": "Portinatx residence",
+      "spot_name": "EPH_L2E_4062I",
+      "code": "L2E",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 287000,
+      "sell_price": 274000,
+      "windowed_garage": true,
+      "house_hc": 6864948825018893173
+    },
+    {
+      "id": 108,
+      "name": "Sa Cala house",
+      "spot_name": "EPH_L3DI_5067I",
+      "code": "L3DI",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 602000,
+      "sell_price": 590000,
+      "windowed_garage": false,
+      "house_hc": 5279481567775327652
+    },
+    {
+      "id": 109,
+      "name": "Zenith loft",
+      "spot_name": "EPH_L3A2_2103I",
+      "code": "L3A2",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 385000,
+      "sell_price": 375500,
+      "windowed_garage": false,
+      "house_hc": 3621232198427706788
+    },
+    {
+      "id": 110,
+      "name": "Salines mansion",
+      "spot_name": "EPH_L2E_2477I",
+      "code": "L2E",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 282000,
+      "sell_price": 277500,
+      "windowed_garage": true,
+      "house_hc": 6864948824943626669
+    },
+    {
+      "id": 111,
+      "name": "Santa Eulària residence",
+      "spot_name": "EPH_L1D_4275I",
+      "code": "L1D",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 161000,
+      "sell_price": 150000,
+      "windowed_garage": true,
+      "house_hc": 6864666250455290035
+    },
+    {
+      "id": 112,
+      "name": "Hydro House",
+      "spot_name": "EPH_L4F_1315",
+      "code": "L4F",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1546000,
+      "sell_price": 1536000,
+      "windowed_garage": true,
+      "house_hc": 6865232185503156093
+    },
+    {
+      "id": 113,
+      "name": "Tennis House",
+      "spot_name": "EPH_L4B_9631",
+      "code": "L4B",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "buy_price": 1205000,
+      "sell_price": 1102500,
+      "windowed_garage": false,
+      "house_hc": 6864106285504144799
+    },
+    {
+      "id": 114,
+      "name": "Sant Rafael hacienda",
+      "spot_name": "EPH_L1C_3301I",
+      "code": "L1C",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 118000,
+      "sell_price": 108000,
+      "windowed_garage": true,
+      "house_hc": 6864384775478578405
+    },
+    {
+      "id": 115,
+      "name": "Sant Jordi residence",
+      "spot_name": "EPH_L1C_2462I",
+      "code": "L1C",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 110000,
+      "sell_price": 100000,
+      "windowed_garage": true,
+      "house_hc": 6864384775478577566
+    },
+    {
+      "id": 116,
+      "name": "Porroig house",
+      "spot_name": "EPH_L1D_1455I",
+      "code": "L1D",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 158000,
+      "sell_price": 145000,
+      "windowed_garage": true,
+      "house_hc": 6864666250455287215
+    },
+    {
+      "id": 117,
+      "name": "Lumberjack house",
+      "spot_name": "EPH_L2D_2430I",
+      "code": "L2D",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 202000,
+      "sell_price": 192000,
+      "windowed_garage": true,
+      "house_hc": 6864667349966915966
+    },
+    {
+      "id": 118,
+      "name": "Refuge house",
+      "spot_name": "EPH_L2D_4272I",
+      "code": "L2D",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 198000,
+      "sell_price": 188000,
+      "windowed_garage": true,
+      "house_hc": 6864667349966917808
+    },
+    {
+      "id": 123,
+      "name": "Eivissa house",
+      "spot_name": "EPH_L3DI_3346I",
+      "code": "L3DI",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 590000,
+      "sell_price": 580000,
+      "windowed_garage": false,
+      "house_hc": 5279481563447002020
+    },
+    {
+      "id": 124,
+      "name": "Yacht",
+      "spot_name": "EPH_L5Y_0362I",
+      "code": "L5Y",
+      "island": "Ibiza",
+      "level": 5,
+      "slots": 6,
+      "buy_price": 5000000,
+      "sell_price": 4000000,
+      "windowed_garage": false,
+      "house_hc": 6870581623037789045
+    },
+    {
+      "id": 125,
+      "name": "Fontanelles house",
+      "spot_name": "EPH_L1BI_1216I",
+      "code": "L1BI",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 95000,
+      "sell_price": 85000,
+      "windowed_garage": false,
+      "house_hc": 5278916410191938468
+    },
+    {
+      "id": 126,
+      "name": "Seaside apartment",
+      "spot_name": "EPH_L1BI_3055I",
+      "code": "L1BI",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "buy_price": 102000,
+      "sell_price": 92000,
+      "windowed_garage": false,
+      "house_hc": 5278916414419927460
+    },
+    {
+      "id": 127,
+      "name": "Caletes house",
+      "spot_name": "EPH_L2D_5045I",
+      "code": "L2D",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "buy_price": 205000,
+      "sell_price": 190500,
+      "windowed_garage": true,
+      "house_hc": 6864667349966918581
+    },
+    {
+      "id": 128,
+      "name": "Fujinoki residence",
+      "spot_name": "EPH_L3E_2127I",
+      "code": "L3E",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 811000,
+      "sell_price": 801000,
+      "windowed_garage": false,
+      "house_hc": 6864949924530323833
+    },
+    {
+      "id": 129,
+      "name": "Sant Llorenç hacienda",
+      "spot_name": "EPH_L3E_4115I",
+      "code": "L3E",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "buy_price": 820000,
+      "sell_price": 810000,
+      "windowed_garage": false,
+      "house_hc": 6864949924455256083
+    }
+  ],
+  "known_hcs": {
+    "6864383676025504374": {
+      "name": "Caravan",
+      "island": "Ibiza",
+      "level": 0,
+      "slots": 2,
+      "spot": "EPH_L0C_1254I"
+    },
+    "6870581623037789045": {
+      "name": "Yacht",
+      "island": "Ibiza",
+      "level": 5,
+      "slots": 6,
+      "spot": "EPH_L5Y_0362I"
+    },
+    "3621312462692385444": {
+      "name": "Zenith loft",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3A2_2103I"
+    },
+    "3621232198427706788": {
+      "name": "Zenith loft",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3A2_2103I"
+    },
+    "5279481563447002020": {
+      "name": "Eivissa house",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3DI_3346I"
+    },
+    "5279481567775327652": {
+      "name": "Sa Cala house",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3DI_5067I"
+    },
+    "6864949924530323833": {
+      "name": "Fujinoki residence",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3E_2127I"
+    },
+    "6864948824968691833": {
+      "name": "Cala Moli residence",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2E_0345I"
+    },
+    "6864948825018893173": {
+      "name": "Portinatx residence",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2E_4062I"
+    },
+    "5278916414419927460": {
+      "name": "Seaside apartment",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1BI_3055I"
+    },
+    "5278916410191938468": {
+      "name": "Fontanelles house",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1BI_1216I"
+    },
+    "6863820412573155958": {
+      "name": "Mokuleia shack",
+      "island": "Hawaii",
+      "level": 0,
+      "slots": 2,
+      "spot": "EPH_L0A_1276"
+    },
+    "6870581309471622011": {
+      "name": "Yacht",
+      "island": "Hawaii",
+      "level": 5,
+      "slots": 6,
+      "spot": "EPH_L5Y_6360"
+    },
+    "6865232185486050166": {
+      "name": "Falls House",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4F_8766"
+    },
+    "6865232185419268987": {
+      "name": "Mineral House",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4F_6361"
+    },
+    "6865232185503156093": {
+      "name": "Hydro House",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4F_1315"
+    },
+    "6864106285562431613": {
+      "name": "Black Point House",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4B_8814"
+    },
+    "6864106285545916279": {
+      "name": "Ko Olina Paradise",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4B_2753"
+    },
+    "6864668136054622076": {
+      "name": "Honolulu loft",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3D_7727"
+    },
+    "6864668135937050231": {
+      "name": "Kaneohe loft",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3D_9500"
+    },
+    "6864668135937049982": {
+      "name": "Nanakuli loft",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3D_2600"
+    },
+    "6863823934412783734": {
+      "name": "Loophole Haven of Peace",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3A_8646"
+    },
+    "6864386867136069750": {
+      "name": "Lokoea Village",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3C_2263"
+    },
+    "6864386660960601468": {
+      "name": "Coconut Beach House",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3C_7864"
+    },
+    "6864102987077879676": {
+      "name": "Kaakahi Spring",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1B_7717"
+    },
+    "6864102987077813366": {
+      "name": "Lanikuhana Village",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1B_4512"
+    },
+    "6865229986429632890": {
+      "name": "Kahuku stilt house",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2F_5173"
+    },
+    "6865229986378974590": {
+      "name": "Kaneohe stilt house",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2F_9520"
+    },
+    "6864385561499174523": {
+      "name": "Hoomaluhia Paradise",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2C_9745"
+    },
+    "6864104086539174521": {
+      "name": "Honouliali Village",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2B_3614"
+    },
+    "6863821511992542756": {
+      "name": "Mililani Haven of Peace",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1A_1572"
+    },
+    "6863821511992543451": {
+      "name": "Kaukonahua Home",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1A_2267"
+    },
+    "6863823711015802289": {
+      "name": "Waimano Home",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3A2_5553"
+    },
+    "6864386660969228858": {
+      "name": "Sandy Beach Dream",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3C_10810"
+    },
+    "6864385561457599895": {
+      "name": "Keolo Hills",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2C_9623"
+    },
+    "6864104086480884090": {
+      "name": "Puninoni Village",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2B_4474"
+    },
+    "6864102986969255214": {
+      "name": "Wahiawa Abode",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1B_3374"
+    },
+    "6864385561457595426": {
+      "name": "Lokelani House",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2C_5154"
+    },
+    "6863823711015807480": {
+      "name": "Makapu'u Meditation",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3A_10744"
+    },
+    "6863821511992550798": {
+      "name": "PohaKupu Village",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1A_9614"
+    },
+    "6864106285504140318": {
+      "name": "Kahuku Point Paradise",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4B_5150"
+    },
+    "6864104086480884630": {
+      "name": "Turtle Refuge",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2B_5014"
+    },
+    "6863823711015798146": {
+      "name": "Lost Keaau House",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3A_1410"
+    },
+    "6864102986969253247": {
+      "name": "Kalaeokakao Jewel",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1B_1407"
+    },
+    "6864104086480883830": {
+      "name": "Kaiaka Paradise",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2B_4214"
+    },
+    "6864104086480887128": {
+      "name": "Waihee Terrace",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2B_7512"
+    },
+    "6864386660969225588": {
+      "name": "Kaiuapuieho Sun Rise",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3C_7540"
+    },
+    "6863821511992549701": {
+      "name": "Hui Akikiki Place",
+      "island": "Hawaii",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1A_8517"
+    },
+    "6864106285504143741": {
+      "name": "The Orient",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4B_8573"
+    },
+    "6864386660969224671": {
+      "name": "Tropical House",
+      "island": "Hawaii",
+      "level": 3,
+      "slots": 4,
+      "spot": "EPH_L2C_6623"
+    },
+    "6865229986387725996": {
+      "name": "Barber stilt house",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2F_3756"
+    },
+    "6865229986387727855": {
+      "name": "Loch stilt house",
+      "island": "Hawaii",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2F_5615"
+    },
+    "6864948824943626669": {
+      "name": "Salines mansion",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2E_2477I"
+    },
+    "6864666250455290035": {
+      "name": "Santa Eulària residence",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1D_4275I"
+    },
+    "6864106285504144799": {
+      "name": "Tennis House",
+      "island": "Hawaii",
+      "level": 4,
+      "slots": 8,
+      "spot": "EPH_L4B_9631"
+    },
+    "6864384775478578405": {
+      "name": "Sant Rafael hacienda",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1C_3301I"
+    },
+    "6864384775478577566": {
+      "name": "Sant Jordi residence",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1C_2462I"
+    },
+    "6864666250455287215": {
+      "name": "Porroig house",
+      "island": "Ibiza",
+      "level": 1,
+      "slots": 2,
+      "spot": "EPH_L1D_1455I"
+    },
+    "6864667349966915966": {
+      "name": "Lumberjack house",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2D_2430I"
+    },
+    "6864667349966917808": {
+      "name": "Refuge house",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2D_4272I"
+    },
+    "6864667349966918581": {
+      "name": "Caletes house",
+      "island": "Ibiza",
+      "level": 2,
+      "slots": 4,
+      "spot": "EPH_L2D_5045I"
+    },
+    "6864949924455256083": {
+      "name": "Sant Llorenç hacienda",
+      "island": "Ibiza",
+      "level": 3,
+      "slots": 6,
+      "spot": "EPH_L3E_4115I"
+    }
+  }
+}
