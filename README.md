@@ -13,7 +13,7 @@ WARNING: THIS TOOLKIT IS INTENDED FOR USE ON TDU2 WITH TDUWORLD MOD INSTALLED. C
 This toolkit provides an offline, browser-based interface for inspecting, editing, tuning, repairing, and managing online/offline status for TDU2 PC save files. The software runs entirely on the Python standard library with no external third-party dependencies or installations required.
 
 ### Core Capabilities
-- **Save Path Detection & Active Path Isolation (v2.0.2)**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables. Additionally, if profiles do not appear in the dropdown menu, you can specify a custom path.
+- **Save Path Detection & Active Path Isolation**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables. Additionally, if profiles do not appear in the dropdown menu, you can specify a custom path.
 - **Tab 1: Player Profile Editor**:
   - **Player Finances & Level**: Edit Driver Money (up to $2,147,483,648), Casino Points (up to 2,147,483,648 Cp), and Overall Player Level (1 to 73).
   - **Profile Mode Status**: Live status indicator and quick toggle between Single-Player Offline and Multiplayer Online modes.
