@@ -33,7 +33,8 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 
 ### Prerequisites
 - Windows 7, 8, 10, or 11
-- Python 3.8 or newer installed and available in your system `PATH`
+- Python 3.8 or newer installed and available in your system `PATH` *(Note for Windows 7 & 8: install Python 3.8.10 with SP1/KB2999226, as Python 3.9+ dropped Win7/8 support)*
+- A modern web browser (Google Chrome, Mozilla Firefox, Microsoft Edge, Opera, or Supermium)
 - No additional libraries or `pip` packages are required
 
 ### Quick Start
