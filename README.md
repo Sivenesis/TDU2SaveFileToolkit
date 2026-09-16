@@ -1,25 +1,31 @@
-# Test Drive Unlimited 2 Save File Toolkit (WebGUI)
+# Test Drive Unlimited 2 Save File Toolkit (WebGUI) v2.0.2
 
 A zero-dependency local web interface and editing engine for *Test Drive Unlimited 2* save files on Windows PC.
 
-# WARNING: TOOLKIT EDITS ACTUAL SAVE FILES IN DOCUMENTS FOLDER. CREATE BACKUPS BEFORE ANY OPERATION.
-# WARNING: THIS TOOLKIT IS INTENDED FOR USE ON TDU2 WITH TDUWORLD MOD INSTALLED. CLEAN VERSION OF THE GAME WASN'T TESTED.
-
-I do not condone the use of the Save File Toolkit on online profiles within official or community-developed online modes.
-
+WARNING: TOOLKIT EDITS ACTUAL SAVE FILES IN DOCUMENTS OR USER-SPECIFIED FOLDERS. CREATE BACKUPS BEFORE ANY OPERATION.
 ---
 
 ## Overview
 
-This toolkit provides an offline, browser-based interface for inspecting, editing, tuning, and repairing TDU2 PC save files. The software runs entirely on the Python standard library with no external third-party dependencies or installations required.
+This toolkit provides an offline, browser-based interface for inspecting, editing, tuning, repairing, and managing online/offline status for TDU2 PC save files. The software runs entirely on the Python standard library with no external third-party dependencies or installations required.
 
 ### Core Capabilities
-- **Player Profile Editing**: Edit Driver Money (up to $999,999,999), Casino Points (up to 999,999,999 Cp), and Overall Player Level (1 to 73).
-- **All-in-One Furniture Unlocker**: Unlock all 383 authentic furniture items and the Casino furniture.
-- **Garage Showroom & Vehicle Swapping**: View owned properties and parked vehicles across Ibiza and Hawaii. Swap any vehicle to any model from the complete 359-car database.
-- **Performance Tuning**: Adjust individual tuning stages (Acceleration, Top Speed, Braking from Level 0 to 4) or apply one-click maximum tuning per car.
-- **Decrypted Save File Manipulation**: Unpack `DATA`, `KEYMAP`, and `OPTIONS` containers into formatted JSON and raw binary templates in a dedicated `decrypt/` folder, with one-click re-encryption and packaging back to game-ready saves.
-- **Automated Backup Manager**: Generates safety backups before every write operation and provides a built-in restoration interface.
+- **Save Path Detection & Active Path Isolation (v2.0.2)**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables.
+- **Tab 1: Player Profile Editor**:
+  - **Player Finances & Level**: Edit Driver Money (up to $2,147,483,648), Casino Points (up to 2,147,483,648 Cp), and Overall Player Level (1 to 73).
+  - **Profile Mode Status**: Live status indicator and quick toggle between Single-Player Offline and Multiplayer Online modes.
+  - **Casino Furniture Unlocker (v2.0.2)**: One-click unlock for the exclusive Casino furniture suite for residences and penthouses.
+- **Tab 2: Garage Editor**:
+  - **Garage Showroom**: Browse all owned properties and parked vehicles across Ibiza and Hawaii with slot occupancy metrics.
+  - **Vehicle Model Swapping**: Safely swap any owned vehicle with any model from the complete 359-vehicle catalog.
+  - **Performance Tuning**: Adjust individual tuning stages (Acceleration, Top Speed, Braking from Level 0 to 4) or apply one-click maximum tuning per car.
+- **Tab 3: Save Files Manipulation**:
+  - **Decrypted Save File Manipulation**: Unpack encrypted `DATA`, `KEYMAP`, and `OPTIONS` containers into formatted JSON and raw binary templates in a dedicated `decrypt/` folder, with one-click re-encryption and packaging back to game-ready saves.
+  - **Automated Backup Manager**: Generates safety backups before every write operation and provides a built-in restoration interface.
+- **Tab 4: Online Mode Switcher**:
+  - **Online vs. Offline Mode Switcher**: Inspects and toggles profiles between Single-Player Offline and Multiplayer Online mode. Synchronously patches `ProfileList.dat` (byte 256: `0xFF`=Online, `0x00`=Offline) and the encrypted `OPTIONS` container (`IsOnlineEnabledProfile`).
+  - **Online Account Credentials Management**: Configure multiplayer credentials when switching to online mode—either clone credentials from an existing registered profile or enter custom login credentials.
+  - **Progression Transfer into Server-Registered Profiles**: Fixes multiplayer "Invalid Nickname" server rejections. Injects full offline progress (cash, houses, tuned cars, discovered roads) directly into an existing server-registered online profile while 100% preserving the target's online nickname, 8-byte Profile UUID, DLC tokens (`Extends`), and credentials.
 
 ---
 
@@ -28,6 +34,7 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 ### Prerequisites
 - Windows 7, 8, 10, or 11
 - Python 3.8 or newer installed and available in your system `PATH`
+- No additional libraries or `pip` packages are required
 
 ### Quick Start
 1. Run `Run_WebGUI.bat` (or `Run_WebGUI_Silent.vbs` to run in the background without a persistent console window).
@@ -36,10 +43,42 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
    http://127.0.0.1:8282
    ```
 3. In the header profile selector, select your profile and click **Load Profile**.
-4. Use the three dedicated tabs to inspect and edit your game data:
-   - **Tab 1: Player Profile Editor**: Update money, casino points, and level, or unlock furniture and decor. Click **Save Profile Changes** to write changes to disk.
-   - **Tab 2: Garage Editor**: Browse owned properties and cars. Use the **Tune** button to set performance stages (0 to 4) or click **Max All (Lvl 4)**. Use the **Swap Car** button to replace a car model.
+   - *If your saves are stored in an alternate directory*, click **Custom Path...** (or click the prompt *"Can't see your profiles? Specify custom savegame path"*), enter your folder, and click **Apply Path**. You can reset back to standard Documents at any time with one click.
+4. Use the four dedicated tabs to inspect, edit, and manage your game data:
+    - **Tab 1: Player Profile Editor**: Update money (up to $2,147,483,648), casino points (up to 2,147,483,648 Cp), and level, view online status, or unlock casino furniture. Click **Save Profile Changes** to write changes to disk.
+   - **Tab 2: Garage Editor**: Browse owned properties. Use the **Tune** button to set performance stages (0 to 4) or click **Max All (Lvl 4)**. Use the **Swap Car** button to replace a car model.
    - **Tab 3: Save Files Manipulation**: Click **Unpack Save to decrypt/** to export human-readable `.json` files. After manual edits, click **Pack from decrypt/ to Game-Ready Save** to re-encrypt and install. Previous versions can be restored at any time from the Backups table.
+   - **Tab 4: Online Mode Switcher**: View all registered profiles, their `ProfileList.dat` flags, and `OPTIONS` container states. One-click switch between Online and Offline modes, configure multiplayer login credentials, or clone progression from an offline save into a registered online profile.
+
+---
+
+## Command-Line Interface (CLI)
+
+The underlying core engine `tdu2_save_tool.py` can also be run directly from the command line:
+
+```bash
+# View help and version
+python tdu2_save_tool.py --version
+
+# Switch a profile to online mode with custom credentials
+python tdu2_save_tool.py switch "PlayerName" --mode online --login "MyNick" --email "user@example.com" --password "secret"
+
+# Switch a profile to online mode by cloning credentials from another profile
+python tdu2_save_tool.py switch "PlayerName" --mode online --clone-from "RegisteredOnlineProfile"
+
+# Switch a profile back to offline mode
+python tdu2_save_tool.py switch "PlayerName" --mode offline
+
+# Clone progression from an offline profile into a registered online profile
+python tdu2_save_tool.py clone-progression "OfflineProfile" "OnlineProfile" --dir "C:\Path\To\savegame"
+```
+
+---
+
+## Known Issues
+
+> [!NOTE]
+> **Known issue:** Level editing doesn't work on online profiles (Work in progress).
 
 ---
 

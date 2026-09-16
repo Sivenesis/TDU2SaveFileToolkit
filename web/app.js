@@ -1,12 +1,14 @@
 /**
- * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Revision 2
- * Clean, streamlined client logic for 3-tab architecture.
+ * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 2.0.2
+ * Modern client logic for 4-tab architecture, custom path management, and online mode switcher.
  */
 
 const state = {
   activeProfile: null,
   activeSavePath: null,
   isLiveDocuments: false,
+  customDir: null,
+  defaultDir: null,
   saveSummary: null,
   profilesList: [],
   catalogCars: [],
@@ -24,26 +26,47 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
   setupEventListeners();
   setStandbyUI();
-  addLog("TDU2 Save File Toolkit initialized. Scanning available save profiles...", "info");
+  addLog("TDU2 Save File Toolkit v2.0.2 initialized. Scanning available save profiles...", "info");
   fetchProfiles();
   fetchCatalog();
 });
+
 
 function cacheElements() {
   el.topProfileName = document.getElementById('topProfileName');
   el.topBackupCount = document.getElementById('topBackupCount');
   el.profileStatusDot = document.getElementById('profileStatusDot');
+  el.topOnlinePill = document.getElementById('topOnlinePill');
+  el.topOnlineMode = document.getElementById('topOnlineMode');
 
   el.profileDropdown = document.getElementById('profileDropdown');
   el.btnLoadProfile = document.getElementById('btnLoadProfile');
   el.btnRefreshProfiles = document.getElementById('btnRefreshProfiles');
+  el.btnOpenCustomPath = document.getElementById('btnOpenCustomPath');
+  el.btnSpecifyPathPrompt = document.getElementById('btnSpecifyPathPrompt');
   el.activePathText = document.getElementById('activePathText');
   el.bannerPathText = document.getElementById('bannerPathText');
   el.driverBadge = document.getElementById('driverBadge');
 
+  // Custom Path Banner & Modal
+  el.customPathActiveBanner = document.getElementById('customPathActiveBanner');
+  el.customPathBannerText = document.getElementById('customPathBannerText');
+  el.btnResetToDefaultDocs = document.getElementById('btnResetToDefaultDocs');
+
+  el.customPathModal = document.getElementById('customPathModal');
+  el.customPathCloseBtn = document.getElementById('customPathCloseBtn');
+  el.customPathCancelBtn = document.getElementById('customPathCancelBtn');
+  el.customPathInput = document.getElementById('customPathInput');
+  el.currentCustomPathStatus = document.getElementById('currentCustomPathStatus');
+  el.btnApplyCustomPath = document.getElementById('btnApplyCustomPath');
+  el.btnResetDocsInModal = document.getElementById('btnResetDocsInModal');
+
   // Profile Form (Tab 1)
   el.emptyProfileBanner = document.getElementById('emptyProfileBanner');
   el.profileLoadedContent = document.getElementById('profileLoadedContent');
+  el.tab1ModeBadge = document.getElementById('tab1ModeBadge');
+  el.tab1ModeExplanation = document.getElementById('tab1ModeExplanation');
+  el.btnTab1ToggleOnline = document.getElementById('btnTab1ToggleOnline');
   el.inputMoney = document.getElementById('inputMoney');
   el.inputCasinoPoints = document.getElementById('inputCasinoPoints');
   el.moneyFormattedHint = document.getElementById('moneyFormattedHint');
@@ -51,7 +74,9 @@ function cacheElements() {
   el.inputLevel = document.getElementById('inputLevel');
   el.btnSaveProfile = document.getElementById('btnSaveProfile');
 
-  // Furniture (Tab 1)
+  // Casino Furniture (Tab 1)
+  el.statCasinoFurniture = document.getElementById('statCasinoFurniture') || document.getElementById('statCasinoVip');
+  el.btnUnlockCasinoFurniture = document.getElementById('btnUnlockCasinoFurniture') || document.getElementById('btnUnlockAllFurniture');
   el.statFurnCount = document.getElementById('statFurnCount');
   el.statMatsCount = document.getElementById('statMatsCount');
   el.statCasinoVip = document.getElementById('statCasinoVip');
@@ -72,6 +97,20 @@ function cacheElements() {
   el.decryptFolderPath = document.getElementById('decryptFolderPath');
   el.backupsTotalBadge = document.getElementById('backupsTotalBadge');
   el.backupsTableBody = document.getElementById('backupsTableBody');
+
+  // Online Mode Switcher (Tab 4)
+  el.onlineProfileCountBadge = document.getElementById('onlineProfileCountBadge');
+  el.onlineProfilesTableBody = document.getElementById('onlineProfilesTableBody');
+  el.credModeClone = document.getElementById('credModeClone');
+  el.credModeCustom = document.getElementById('credModeCustom');
+  el.credCloneSelect = document.getElementById('credCloneSelect');
+  el.credLoginName = document.getElementById('credLoginName');
+  el.credEmail = document.getElementById('credEmail');
+  el.credPassword = document.getElementById('credPassword');
+  el.progSourceSelect = document.getElementById('progSourceSelect');
+  el.progTargetSelect = document.getElementById('progTargetSelect');
+  el.progCopyKeymap = document.getElementById('progCopyKeymap');
+  el.btnExecuteCloneProg = document.getElementById('btnExecuteCloneProg');
 
   // Diagnostic Console
   el.consoleDrawer = document.getElementById('consoleDrawer');
@@ -103,6 +142,7 @@ function cacheElements() {
   el.toastContainer = document.getElementById('toastContainer');
 }
 
+
 // --- TAB NAVIGATION ---
 function setupTabs() {
   const tabs = document.querySelectorAll('.app-tabs .tab-btn');
@@ -115,9 +155,14 @@ function setupTabs() {
       document.querySelectorAll('.tab-pane').forEach(pane => {
         pane.classList.toggle('active', pane.id === target);
       });
+
+      if (target === 'tab-online-switch') {
+        renderOnlineSwitcherTab(state.profilesList);
+      }
     });
   });
 }
+
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
@@ -136,6 +181,25 @@ function setupEventListeners() {
   if (el.btnRefreshProfiles) {
     el.btnRefreshProfiles.addEventListener('click', fetchProfiles);
   }
+
+  // Custom Savegame Path Modal Listeners
+  if (el.btnOpenCustomPath) el.btnOpenCustomPath.addEventListener('click', openCustomPathModal);
+  if (el.btnSpecifyPathPrompt) el.btnSpecifyPathPrompt.addEventListener('click', openCustomPathModal);
+  if (el.customPathCloseBtn) el.customPathCloseBtn.addEventListener('click', closeCustomPathModal);
+  if (el.customPathCancelBtn) el.customPathCancelBtn.addEventListener('click', closeCustomPathModal);
+  if (el.btnApplyCustomPath) el.btnApplyCustomPath.addEventListener('click', () => applyCustomPath());
+  if (el.btnResetDocsInModal) el.btnResetDocsInModal.addEventListener('click', resetToDefaultDocuments);
+  if (el.btnResetToDefaultDocs) el.btnResetToDefaultDocs.addEventListener('click', resetToDefaultDocuments);
+
+  // Tab 1 Online Mode Quick Toggle
+  if (el.btnTab1ToggleOnline) el.btnTab1ToggleOnline.addEventListener('click', handleTab1ToggleOnline);
+
+  // Tab 4 Credential Mode Radios
+  if (el.credModeClone) el.credModeClone.addEventListener('change', updateCredInputs);
+  if (el.credModeCustom) el.credModeCustom.addEventListener('change', updateCredInputs);
+
+  // Tab 4 Progression Transfer
+  if (el.btnExecuteCloneProg) el.btnExecuteCloneProg.addEventListener('click', executeProgressionTransfer);
 
   // Profile Form Hints
   if (el.inputMoney) {
@@ -157,13 +221,14 @@ function setupEventListeners() {
     el.btnSaveProfile.addEventListener('click', saveProfileChanges);
   }
 
-  // Unlock All Furniture
-  if (el.btnUnlockAllFurniture) {
-    el.btnUnlockAllFurniture.addEventListener('click', () => {
+  // Unlock Casino Furniture
+  const unlockCasinoBtn = el.btnUnlockCasinoFurniture || el.btnUnlockAllFurniture;
+  if (unlockCasinoBtn) {
+    unlockCasinoBtn.addEventListener('click', () => {
       showConfirmModal(
-        "Unlock All Furniture & Interior Materials?",
-        "This will unlock all <strong>383 authentic furniture items</strong>, all <strong>61 living/garage materials</strong>, and the <strong>Casino VIP decor suite</strong> in your save.<br><br>A timestamped backup will automatically be saved to <strong>Backups/</strong>.",
-        executeUnlockFurniture
+        "Unlock Casino Furniture?",
+        "This will unlock the exclusive Casino furniture in your save.<br><br>A timestamped backup will automatically be saved to <strong>Backups/</strong>.",
+        executeUnlockCasinoFurniture
       );
     });
   }
@@ -297,6 +362,14 @@ function setStandbyUI() {
   if (el.profileLoadedContent) el.profileLoadedContent.style.display = 'none';
   if (el.topProfileName) el.topProfileName.textContent = 'None';
   if (el.profileStatusDot) el.profileStatusDot.classList.add('standby');
+  if (el.topOnlineMode) {
+    el.topOnlineMode.textContent = '--';
+    el.topOnlineMode.className = 'val mode-tag-pill';
+  }
+  if (el.tab1ModeBadge) {
+    el.tab1ModeBadge.textContent = 'OFFLINE';
+    el.tab1ModeBadge.className = 'mode-tag-badge mode-badge-offline';
+  }
   if (el.topBackupCount) el.topBackupCount.textContent = '0';
   if (el.garageTabCount) el.garageTabCount.textContent = '0';
   if (el.activePathText) el.activePathText.textContent = "No profile selected. Choose a profile from the dropdown and click 'Load Profile'.";
@@ -315,6 +388,91 @@ function setStandbyUI() {
   }
 }
 
+// --- CUSTOM PATH MODAL & MANAGEMENT ---
+function openCustomPathModal() {
+  if (el.customPathInput) {
+    el.customPathInput.value = state.customDir || '';
+  }
+  if (el.currentCustomPathStatus) {
+    if (state.customDir) {
+      el.currentCustomPathStatus.textContent = `Active custom folder: ${state.customDir}`;
+    } else {
+      el.currentCustomPathStatus.textContent = `Current default: ${state.defaultDir || 'Documents\\Eden Games\\Test Drive Unlimited 2\\savegame'}`;
+    }
+  }
+  if (el.customPathModal) el.customPathModal.classList.add('active');
+}
+
+function closeCustomPathModal() {
+  if (el.customPathModal) el.customPathModal.classList.remove('active');
+}
+
+async function applyCustomPath(pathValue) {
+  const target = (pathValue !== undefined ? pathValue : (el.customPathInput ? el.customPathInput.value : '')).trim();
+  if (!target) {
+    showToast("Please enter a path to your savegame or profile folder.", "error");
+    return;
+  }
+  addLog(`Setting custom save path: ${target}...`, "info");
+  try {
+    const res = await fetch('/api/save-directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ directory: target })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    closeCustomPathModal();
+    state.customDir = data.custom_dir;
+    state.profilesList = data.profiles || [];
+    renderProfileDropdown(state.profilesList);
+    renderOnlineSwitcherTab(state.profilesList);
+    updateCustomPathUI();
+
+    addLog(data.message, "success");
+    showToast(data.message, "success");
+  } catch (err) {
+    addLog(`Custom path error: ${err.message}`, "error");
+    showToast(`Path Error: ${err.message}`, "error");
+  }
+}
+
+async function resetToDefaultDocuments() {
+  addLog("Resetting save path to default Documents folder...", "info");
+  try {
+    const res = await fetch('/api/save-directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    closeCustomPathModal();
+    state.customDir = null;
+    state.profilesList = data.profiles || [];
+    renderProfileDropdown(state.profilesList);
+    renderOnlineSwitcherTab(state.profilesList);
+    updateCustomPathUI();
+
+    addLog("Reset to standard Documents directory.", "info");
+    showToast("Reset to default Documents directory.", "success");
+  } catch (err) {
+    addLog(`Reset error: ${err.message}`, "error");
+    showToast(`Reset Error: ${err.message}`, "error");
+  }
+}
+
+function updateCustomPathUI() {
+  if (state.customDir) {
+    if (el.customPathActiveBanner) el.customPathActiveBanner.style.display = 'flex';
+    if (el.customPathBannerText) el.customPathBannerText.textContent = state.customDir;
+  } else {
+    if (el.customPathActiveBanner) el.customPathActiveBanner.style.display = 'none';
+  }
+}
+
 // --- PROFILE SCANNING & LOADING ---
 async function fetchProfiles() {
   try {
@@ -323,12 +481,18 @@ async function fetchProfiles() {
     if (!data.success) throw new Error(data.error);
 
     state.profilesList = data.profiles || [];
+    state.customDir = data.custom_dir;
+    state.defaultDir = data.default_dir;
+
     renderProfileDropdown(state.profilesList);
+    renderOnlineSwitcherTab(state.profilesList);
+    updateCustomPathUI();
+
     if (data.decrypt_dir && el.decryptFolderPath) {
       el.decryptFolderPath.textContent = data.decrypt_dir;
     }
-    addLog(`Found ${state.profilesList.length} save profile(s) across Documents & local folders.`, "info");
-    // Default state of editor remains empty after page refresh until user selects and clicks Load Profile
+    const locNote = state.customDir ? `custom path (${state.customDir})` : 'Documents & local folders';
+    addLog(`Found ${state.profilesList.length} save profile(s) across ${locNote}.`, "info");
   } catch (err) {
     addLog(`Failed scanning profiles: ${err.message}`, "error");
     showToast(`Scan Error: ${err.message}`, "error");
@@ -342,7 +506,7 @@ function renderProfileDropdown(profiles) {
   if (!profiles.length) {
     const opt = document.createElement('option');
     opt.value = "";
-    opt.textContent = "No TDU2 profiles found";
+    opt.textContent = "No TDU2 profiles found (Use 'Custom Path...' if saves are elsewhere)";
     el.profileDropdown.appendChild(opt);
     return;
   }
@@ -396,6 +560,30 @@ function updateUI(summary) {
   if (el.bannerPathText) el.bannerPathText.textContent = summary.source_path;
   if (el.driverBadge) el.driverBadge.textContent = `Driver: ${summary.driver_name} (Level ${summary.overall_level})`;
 
+  // Online Mode Header Pill & Tab 1 Widget
+  const onlineStatus = summary.online_status || { is_online: false, mode_label: 'OFFLINE' };
+  const isOnline = Boolean(onlineStatus.is_online);
+
+  if (el.topOnlineMode) {
+    el.topOnlineMode.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+    el.topOnlineMode.className = `val mode-tag-pill ${isOnline ? 'online' : 'offline'}`;
+  }
+
+  if (el.tab1ModeBadge) {
+    el.tab1ModeBadge.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+    el.tab1ModeBadge.className = `mode-tag-badge ${isOnline ? 'mode-badge-online' : 'mode-badge-offline'}`;
+  }
+
+  if (el.tab1ModeExplanation) {
+    el.tab1ModeExplanation.textContent = isOnline
+      ? `Online profile (Server Nickname: ${onlineStatus.login_name || summary.driver_name}${onlineStatus.email ? `, Email: ${onlineStatus.email}` : ''}).`
+      : 'Single-player offline profile. Game runs offline without multiplayer server login prompts.';
+  }
+
+  if (el.btnTab1ToggleOnline) {
+    el.btnTab1ToggleOnline.textContent = isOnline ? 'Switch to Offline Mode' : 'Switch to Online Mode';
+  }
+
   // Tab 1: Profile Form
   if (el.inputMoney) el.inputMoney.value = summary.money;
   if (el.moneyFormattedHint) el.moneyFormattedHint.textContent = `$${summary.money.toLocaleString()}`;
@@ -405,11 +593,16 @@ function updateUI(summary) {
 
   if (el.inputLevel) el.inputLevel.value = summary.overall_level;
 
-  // Furniture status
+  // Casino Furniture status
   const furn = summary.furniture || {};
+  const isCasinoFurnUnlocked = Boolean(furn.casino_vip_unlocked || furn.casino_furniture_unlocked);
+  if (el.statCasinoFurniture) {
+    el.statCasinoFurniture.textContent = isCasinoFurnUnlocked ? 'Unlocked' : 'Locked';
+    el.statCasinoFurniture.className = `stat-mini-val ${isCasinoFurnUnlocked ? 'stat-val-unlocked' : 'stat-val-locked'}`;
+  }
+  if (el.statCasinoVip) el.statCasinoVip.textContent = isCasinoFurnUnlocked ? 'Unlocked' : 'Locked';
   if (el.statFurnCount) el.statFurnCount.textContent = `${furn.unlocked_count || 0} / 383`;
   if (el.statMatsCount) el.statMatsCount.textContent = `${furn.materials_unlocked || 0} / 61`;
-  if (el.statCasinoVip) el.statCasinoVip.textContent = furn.casino_vip_unlocked ? 'Unlocked' : 'Locked';
 
   // Tab 2: Garage
   if (el.garageTabCount) el.garageTabCount.textContent = summary.garage.count;
@@ -422,6 +615,7 @@ function updateUI(summary) {
   renderBackupsTable(backups.list);
 }
 
+
 // --- SAVE PROFILE CHANGES (TAB 1) ---
 async function saveProfileChanges() {
   if (!state.activeSavePath) {
@@ -430,8 +624,8 @@ async function saveProfileChanges() {
   }
 
   const payload = {
-    money: Number(el.inputMoney.value) || 0,
-    casino_points: Number(el.inputCasinoPoints.value) || 0,
+    money: Math.min(2147483648, Math.max(0, Number(el.inputMoney.value) || 0)),
+    casino_points: Math.min(2147483648, Math.max(0, Number(el.inputCasinoPoints.value) || 0)),
     level: Math.min(73, Math.max(1, Number(el.inputLevel.value) || 1))
   };
 
@@ -460,12 +654,12 @@ async function saveProfileChanges() {
   }
 }
 
-// --- UNLOCK ALL FURNITURE (TAB 1) ---
-async function executeUnlockFurniture() {
-  addLog("Unlocking all furniture, interior materials, and Casino VIP decor...", "info");
+// --- UNLOCK CASINO FURNITURE (TAB 1) ---
+async function executeUnlockCasinoFurniture() {
+  addLog("Unlocking Casino furniture...", "info");
 
   try {
-    const res = await fetch('/api/unlock-furniture', {
+    const res = await fetch('/api/unlock-casino-furniture', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -475,16 +669,18 @@ async function executeUnlockFurniture() {
     state.saveSummary = data.summary;
     updateUI(state.saveSummary);
 
-    addLog(`[FURNITURE UNLOCKED] ${data.message}`, "success");
+    addLog(`[CASINO FURNITURE UNLOCKED] ${data.message}`, "success");
     if (data.backup_path) {
       addLog(`Safety backup created: ${data.backup_path}`, "info");
     }
-    showToast("All 383 furniture items and 61 materials unlocked!", "success");
+    showToast("Casino furniture unlocked successfully!", "success");
   } catch (err) {
-    addLog(`Furniture unlock failed: ${err.message}`, "error");
+    addLog(`Casino furniture unlock failed: ${err.message}`, "error");
     showToast(`Unlock Error: ${err.message}`, "error");
   }
 }
+
+const executeUnlockFurniture = executeUnlockCasinoFurniture;
 
 // --- GARAGE EDITOR (TAB 2) ---
 function renderGarageShowroom() {
@@ -1039,3 +1235,272 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+// --- ONLINE MODE SWITCHER & PROGRESSION TRANSFER (TAB 4) ---
+function updateCredInputs() {
+  const isClone = el.credModeClone ? el.credModeClone.checked : true;
+  if (el.credCloneSelect) el.credCloneSelect.disabled = !isClone;
+  if (el.credLoginName) el.credLoginName.disabled = isClone;
+  if (el.credEmail) el.credEmail.disabled = isClone;
+  if (el.credPassword) el.credPassword.disabled = isClone;
+}
+
+function renderOnlineSwitcherTab(profiles) {
+  if (!el.onlineProfilesTableBody) return;
+  const list = profiles || [];
+
+  if (el.onlineProfileCountBadge) {
+    el.onlineProfileCountBadge.textContent = `${list.length} Profile${list.length === 1 ? '' : 's'}`;
+  }
+
+  // Populate Dropdowns: Clone Credentials, Source Progression, Target Progression
+  const prevCloneVal = el.credCloneSelect?.value;
+  const prevSrcVal = el.progSourceSelect?.value;
+  const prevTgtVal = el.progTargetSelect?.value;
+
+  if (el.credCloneSelect) {
+    el.credCloneSelect.innerHTML = '<option value="">-- Select a profile to clone credentials from --</option>';
+  }
+  if (el.progSourceSelect) {
+    el.progSourceSelect.innerHTML = '<option value="">-- Select Source Profile --</option>';
+  }
+  if (el.progTargetSelect) {
+    el.progTargetSelect.innerHTML = '<option value="">-- Select Target Online Profile --</option>';
+  }
+
+  list.forEach(p => {
+    const st = p.online_status || {};
+    const isOnline = (p.is_online !== undefined) ? Boolean(p.is_online) : Boolean(st.is_online);
+    const nick = p.login_name || st.login_name || '';
+    const email = p.email || st.email || '';
+    const credHint = (nick || email) ? ` • ${nick || email}` : ' • No Stored Nick';
+
+    if (el.credCloneSelect) {
+      const opt = document.createElement('option');
+      opt.value = p.profile_name;
+      opt.textContent = `${p.profile_name} (${isOnline ? 'Online' : 'Offline'}${credHint})`;
+      el.credCloneSelect.appendChild(opt);
+    }
+    if (el.progSourceSelect) {
+      const opt = document.createElement('option');
+      opt.value = p.profile_name;
+      opt.textContent = `${p.profile_name} (${isOnline ? 'Online' : 'Offline'})`;
+      el.progSourceSelect.appendChild(opt);
+    }
+    if (el.progTargetSelect) {
+      const opt = document.createElement('option');
+      opt.value = p.profile_name;
+      opt.textContent = `${p.profile_name} (${isOnline ? 'Online' : 'Offline'})`;
+      el.progTargetSelect.appendChild(opt);
+    }
+  });
+
+  if (prevCloneVal && el.credCloneSelect) el.credCloneSelect.value = prevCloneVal;
+  if (prevSrcVal && el.progSourceSelect) el.progSourceSelect.value = prevSrcVal;
+  if (prevTgtVal && el.progTargetSelect) el.progTargetSelect.value = prevTgtVal;
+
+  updateCredInputs();
+
+  // Populate Profiles Table
+  el.onlineProfilesTableBody.innerHTML = '';
+  if (!list.length) {
+    el.onlineProfilesTableBody.innerHTML = '<tr><td colspan="6" class="table-empty">No TDU2 profiles found in active directory.</td></tr>';
+    return;
+  }
+
+  list.forEach(p => {
+    const st = p.online_status || {};
+    const isOnline = (p.is_online !== undefined) ? Boolean(p.is_online) : Boolean(st.is_online);
+
+    // ProfileList.dat Flag with color-coded badge
+    let regText = '<span style="color:var(--text-dim);">N/A</span>';
+    if (st.registry_online === true || p.reg_flag === '0xFF (Online)') {
+      regText = '<span class="mode-tag-badge mode-badge-online">0xFF (Online)</span>';
+    } else if (st.registry_online === false || p.reg_flag === '0x00 (Offline)') {
+      regText = '<span class="mode-tag-badge mode-badge-offline">0x00 (Offline)</span>';
+    } else if (p.reg_flag && p.reg_flag !== 'Not Registered') {
+      regText = `<code>${escapeHtml(p.reg_flag)}</code>`;
+    } else if (isOnline) {
+      regText = '<span class="mode-tag-badge mode-badge-online">0xFF (Online)</span>';
+    } else if (isOnline === false) {
+      regText = '<span class="mode-tag-badge mode-badge-offline">0x00 (Offline)</span>';
+    }
+
+    // OPTIONS Container Flag with color-coded badge
+    let optText = '<span style="color:var(--text-dim);">N/A</span>';
+    if (st.options_online === true || p.options_flag === true) {
+      optText = '<span class="mode-tag-badge mode-badge-online">True (Online)</span>';
+    } else if (st.options_online === false || p.options_flag === false) {
+      optText = '<span class="mode-tag-badge mode-badge-offline">False (Offline)</span>';
+    } else if (p.options_flag && p.options_flag !== 'Unknown') {
+      optText = `<code>${escapeHtml(String(p.options_flag))}</code>`;
+    } else if (isOnline) {
+      optText = '<span class="mode-tag-badge mode-badge-online">True (Online)</span>';
+    } else if (isOnline === false) {
+      optText = '<span class="mode-tag-badge mode-badge-offline">False (Offline)</span>';
+    }
+
+    // Saved credentials display
+    const loginName = p.login_name || st.login_name;
+    const email = p.email || st.email;
+    let credsDisplay = '<span style="color:var(--text-dim);">None</span>';
+    if (loginName || email) {
+      credsDisplay = `<strong>${escapeHtml(loginName || 'Anonymous')}</strong>${email ? `<br><small style="color:var(--text-dim);">${escapeHtml(email)}</small>` : ''}`;
+    }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(p.profile_name)}</strong></td>
+      <td>
+        <span class="mode-tag-badge ${isOnline ? 'mode-badge-online' : 'mode-badge-offline'}">
+          ${isOnline ? 'ONLINE' : 'OFFLINE'}
+        </span>
+      </td>
+      <td>${regText}</td>
+      <td>${optText}</td>
+      <td>${credsDisplay}</td>
+      <td>
+        <button class="btn btn-xs ${isOnline ? 'btn-secondary' : 'btn-primary'} btn-switch-action" data-profile="${escapeHtml(p.profile_name)}" data-target="${isOnline ? 'offline' : 'online'}">
+          ${isOnline ? 'Switch to Offline' : 'Switch to Online'}
+        </button>
+      </td>
+    `;
+
+    const switchBtn = tr.querySelector('.btn-switch-action');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', () => {
+        const targetOnline = switchBtn.dataset.target === 'online';
+        executeSwitchProfile(p.profile_name, targetOnline);
+      });
+    }
+
+    el.onlineProfilesTableBody.appendChild(tr);
+  });
+}
+
+
+async function executeSwitchProfile(profileName, targetOnline) {
+  const modeLabel = targetOnline ? 'Online' : 'Offline';
+  
+  let payload = {
+    profile_name: profileName,
+    target_online: targetOnline
+  };
+
+  if (targetOnline) {
+    if (el.credModeClone && el.credModeClone.checked) {
+      const cloneFrom = el.credCloneSelect?.value;
+      if (cloneFrom && cloneFrom !== profileName) {
+        payload.clone_from = cloneFrom;
+      }
+    } else {
+      if (el.credLoginName?.value.trim()) payload.login = el.credLoginName.value.trim();
+      if (el.credEmail?.value.trim()) payload.email = el.credEmail.value.trim();
+      if (el.credPassword?.value) payload.password = el.credPassword.value;
+    }
+  }
+
+  addLog(`Switching profile '${profileName}' to ${modeLabel.toUpperCase()} mode...`, "info");
+
+  try {
+    const res = await fetch('/api/switch-mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    addLog(`[MODE SWITCH SUCCESS] ${data.message}`, "success");
+    showToast(data.message, "success");
+
+    // Refresh profiles list and reload if this was the active profile
+    await fetchProfiles();
+
+    if (state.activeProfile === profileName && state.activeSavePath) {
+      await loadProfile(state.activeSavePath);
+    }
+  } catch (err) {
+    addLog(`Mode switch failed for '${profileName}': ${err.message}`, "error");
+    showToast(`Switch Error: ${err.message}`, "error");
+  }
+}
+
+async function executeProgressionTransfer() {
+  const sourceProfile = el.progSourceSelect?.value;
+  const targetProfile = el.progTargetSelect?.value;
+  const copyKeymap = el.progCopyKeymap ? el.progCopyKeymap.checked : true;
+
+  if (!sourceProfile) {
+    showToast("Please select a Source Profile to copy progression from.", "error");
+    return;
+  }
+  if (!targetProfile) {
+    showToast("Please select a Target Online Profile to receive the progression.", "error");
+    return;
+  }
+  if (sourceProfile === targetProfile) {
+    showToast("Source and Target profiles must be different.", "error");
+    return;
+  }
+
+  showConfirmModal(
+    `Transfer Progression: ${sourceProfile} &rarr; ${targetProfile}?`,
+    `This will clone all progression (money, owned houses, tuned vehicles, clothes, unlocked items) from <strong>${escapeHtml(sourceProfile)}</strong> into <strong>${escapeHtml(targetProfile)}</strong>.<br><br>
+    • <strong>${escapeHtml(targetProfile)}'s server nickname, UUID, and DLC tokens will be 100% preserved.</strong><br>
+    • Custom wheel and keyboard bindings (KEYMAP) will ${copyKeymap ? 'be copied' : 'remain untouched'}.<br>
+    • Automatic safety backups of both profiles will be created in <strong>Backups/</strong> prior to transfer.`,
+    async () => {
+      addLog(`Initiating progression transfer from '${sourceProfile}' to '${targetProfile}'...`, "info");
+      try {
+        const res = await fetch('/api/clone-progression', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_profile: sourceProfile,
+            target_profile: targetProfile,
+            copy_keymap: copyKeymap
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        addLog(`[PROGRESSION CLONED] ${data.message}`, "success");
+        showToast(data.message, "success");
+
+        await fetchProfiles();
+
+        if (state.activeProfile === targetProfile || state.activeProfile === sourceProfile) {
+          const matchingProf = state.profilesList.find(p => p.profile_name === targetProfile);
+          if (matchingProf) {
+            await loadProfile(matchingProf.path);
+          }
+        }
+      } catch (err) {
+        addLog(`Progression transfer failed: ${err.message}`, "error");
+        showToast(`Transfer Error: ${err.message}`, "error");
+      }
+    }
+  );
+}
+
+function handleTab1ToggleOnline() {
+  if (!state.activeProfile) {
+    showToast("No active profile loaded. Please load a profile first.", "error");
+    return;
+  }
+
+  const currentOnline = Boolean(state.saveSummary?.online_status?.is_online);
+  const targetOnline = !currentOnline;
+  const targetLabel = targetOnline ? 'Online' : 'Offline';
+
+  showConfirmModal(
+    `Switch ${state.activeProfile} to ${targetLabel} Mode?`,
+    `This will update <strong>ProfileList.dat</strong> (byte 256) and <strong>OPTIONS</strong> (<code>IsOnlineEnabledProfile = ${targetOnline ? 'True' : 'False'}</code>).<br><br>
+    An automatic safety backup will be archived before saving.`,
+    () => {
+      executeSwitchProfile(state.activeProfile, targetOnline);
+    }
+  );
+}
+

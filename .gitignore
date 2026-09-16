@@ -1,0 +1,33 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Save tool runtime folders, decrypted files, and backups
+Backups/
+decrypt/
+*.bak
+*.dec
+*.tmp
+
+# Test sandboxes and archives
+test_sandbox/
+*.7z
+*.zip
+*.tar.*
+
+
+# Environment and IDE files
+.venv/
+env/
+venv/
+.env
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
+*.swp
+*~

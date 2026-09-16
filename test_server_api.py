@@ -94,34 +94,31 @@ def run_tests():
     assert len(summary["garage"]["houses"]) >= 1
     print(f"[+] 3. Profile Loaded: OK (Profile: {summary['profile_name']}, Level {summary['overall_level']}, ${summary['money']:,}, {summary['garage']['count']} cars in {len(summary['garage']['houses'])} houses)")
 
-    # 4. Test Direct Profile Editing (Tab 1)
+    # 4. Test Direct Profile Editing (Tab 1) - Test up to 2,147,483,648
     edit_payload = json.dumps({
-        "money": 75000000,
-        "casino_points": 3500000,
+        "money": 2147483648,
+        "casino_points": 2147483648,
         "level": 73
     }).encode('utf-8')
     req = urllib.request.Request(f"{base_url}/api/edit-profile", data=edit_payload, headers={"Content-Type": "application/json"})
     edit_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert edit_res["success"] is True
-    assert edit_res["summary"]["money"] == 75000000
-    assert edit_res["summary"]["casino_points"] == 3500000
+    assert edit_res["summary"]["money"] == 2147483648
+    assert edit_res["summary"]["casino_points"] == 2147483648
     assert edit_res["summary"]["overall_level"] == 73
     assert edit_res["backup_path"] is not None
     assert Path(edit_res["backup_path"]).is_file()
-    print(f"[+] 4. Tab 1 - Direct Profile Editing: OK (Money: $75M, Casino: 3.5M, Lvl: 73; Backup: {Path(edit_res['backup_path']).name})")
+    print(f"[+] 4. Tab 1 - Direct Profile Editing: OK (Money: $2,147,483,648, Casino: 2,147,483,648 Cp, Lvl: 73; Backup: {Path(edit_res['backup_path']).name})")
 
-    # 5. Test Furniture & Materials Unlock (Tab 1)
+    # 5. Test Casino Furniture Unlock (Tab 1)
     furn_payload = b'{}'
-    req = urllib.request.Request(f"{base_url}/api/unlock-furniture", data=furn_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/unlock-casino-furniture", data=furn_payload, headers={"Content-Type": "application/json"})
     furn_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert furn_res["success"] is True
     f_stat = furn_res["summary"]["furniture"]
-    assert f_stat["unlocked_count"] == 383
-    assert f_stat["materials_unlocked"] == 61
     assert f_stat["casino_vip_unlocked"] is True
-    assert f_stat["is_max_unlocked"] is True
     assert Path(furn_res["backup_path"]).is_file()
-    print(f"[+] 5. Tab 1 - Unlock All Furniture: OK (383 Items, 61 Materials, Casino VIP: Active; Backup: {Path(furn_res['backup_path']).name})")
+    print(f"[+] 5. Tab 1 - Unlock Casino Furniture: OK (Casino Furniture Unlocked; Backup: {Path(furn_res['backup_path']).name})")
 
     # 6. Test Cars Catalog (Tab 2)
     req = urllib.request.urlopen(f"{base_url}/api/cars-catalog")
@@ -229,12 +226,162 @@ def run_tests():
     assert root == "PlayerData"
     print("[+] 14. Cryptographic DES-CBC & Eden-SHA1 Round-Trip: 100% VALID & VERIFIED")
 
+    # 15. Custom Save Directory API (v2.0.0)
+    mock_save_root = sandbox_dir / "mock_savegame"
+    mock_save_root.mkdir(parents=True, exist_ok=True)
+    aspen_src = Path("F:/Progs/VIBECODE/Google/Projects/TDU2offline2online/OFFLINEprofile/Aspen")
+    
+    if aspen_src.is_dir():
+        aspen_dst = mock_save_root / "Aspen"
+        shutil.copytree(aspen_src, aspen_dst, dirs_exist_ok=True)
+    else:
+        # Create minimal synthetic profile structure
+        aspen_ps = mock_save_root / "Aspen" / "PLAYERSAVE"
+        aspen_ps.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(test_save, aspen_ps / "DATA")
+
+    # Create synthetic ProfileList.dat with Aspen (0x00 Offline)
+    pld_path = mock_save_root / "ProfileList.dat"
+    pld_hdr = b'\x7b\x32\x00\x00\x00\x00\x00\x00\xff\xff'
+    rec_aspen = bytearray(257)
+    rec_aspen[:5] = b'Aspen'
+    rec_aspen[256] = 0x00
+    pld_path.write_bytes(pld_hdr + rec_aspen)
+
+    # Test POST /api/save-directory with custom path
+    set_dir_payload = json.dumps({"directory": str(mock_save_root)}).encode('utf-8')
+    req = urllib.request.Request(f"{base_url}/api/save-directory", data=set_dir_payload, headers={"Content-Type": "application/json"})
+    dir_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
+    assert dir_res["success"] is True
+    assert dir_res["custom_dir"] == str(mock_save_root.resolve())
+    assert any(p["profile_name"] == "Aspen" for p in dir_res["profiles"])
+    # Verify strict path isolation: all returned profiles must be within mock_save_root
+    for p in dir_res["profiles"]:
+        assert str(mock_save_root.resolve()).lower() in str(Path(p["path"]).resolve()).lower()
+    print(f"[+] 15. Custom Save Directory API & Path Isolation: OK (Active: {dir_res['custom_dir']})")
+
+    # Verify GET /api/profiles returns version, custom_dir, and online_status
+    req = urllib.request.urlopen(f"{base_url}/api/profiles")
+    prof_v2 = json.loads(req.read().decode('utf-8'))
+    assert prof_v2["version"] == "2.0.2"
+    assert prof_v2["custom_dir"] == str(mock_save_root.resolve())
+    aspen_entry = next((p for p in prof_v2["profiles"] if p["profile_name"] == "Aspen"), None)
+    assert aspen_entry is not None
+    assert aspen_entry["online_status"]["registry_online"] is False
+    print(f"[+] 15b. GET /api/profiles v2.0.2 Metadata & Online Status: OK")
+
+    # 16. Test Online Mode Switcher (Tab 4) - Switch to ONLINE with custom credentials
+    switch_payload = json.dumps({
+        "profile_name": "Aspen",
+        "target_online": True,
+        "login": "TestPilot",
+        "email": "pilot@example.com",
+        "password": "mockPassword123"
+    }).encode('utf-8')
+    req = urllib.request.Request(f"{base_url}/api/switch-mode", data=switch_payload, headers={"Content-Type": "application/json"})
+    switch_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
+    assert switch_res["success"] is True
+    assert switch_res["target_online"] is True
+
+    # Verify ProfileList.dat byte 256 was updated to 0xFF
+    _, pld_records = core.read_profile_list(pld_path)
+    aspen_pld = next((r for r in pld_records if r["name"] == "Aspen"), None)
+    assert aspen_pld is not None
+    assert aspen_pld["is_online"] is True
+    assert aspen_pld["flag_byte"] == 0xFF
+
+    # Verify OPTIONS container was updated
+    aspen_creds = core.get_profile_credentials(mock_save_root / "Aspen")
+    assert aspen_creds["is_online"] is True
+    assert aspen_creds["login_name"] == "TestPilot"
+    assert aspen_creds["email"] == "pilot@example.com"
+    assert aspen_creds["password"] == "mockPassword123"
+    print(f"[+] 16. Tab 4 - Switch Mode to ONLINE (Custom Creds): OK (Byte 256=0xFF, IsOnlineEnabledProfile=True)")
+
+    # 17. Test Credential Cloning via switch-mode
+    # Create second profile "AspenTwo" (offline)
+    aspen2_dir = mock_save_root / "AspenTwo"
+    aspen2_ps = aspen2_dir / "PLAYERSAVE"
+    aspen2_ps.mkdir(parents=True, exist_ok=True)
+    core.convert_data_file(
+        src_data_path=mock_save_root / "Aspen" / "PLAYERSAVE" / "DATA",
+        dst_data_path=aspen2_ps / "DATA",
+        src_profile_name="Aspen",
+        dst_profile_name="AspenTwo",
+        make_online=False
+    )
+    # Copy OPTIONS container to AspenTwo
+    shutil.copyfile(mock_save_root / "Aspen" / "PLAYERSAVE" / "OPTIONS", aspen2_ps / "OPTIONS")
+    # Re-key OPTIONS for AspenTwo
+    aspen_opt_b = (aspen2_ps / "OPTIONS").read_bytes()
+    opt_xmbf, opt_foot, _ = core.decrypt_save_file(aspen_opt_b, "Aspen", "OPTIONS")
+    enc_opt_two = core.encrypt_save_file(opt_xmbf, "AspenTwo", "OPTIONS", original_footer=opt_foot)
+    (aspen2_ps / "OPTIONS").write_bytes(enc_opt_two)
+
+    # Append AspenTwo to ProfileList.dat
+    rec_aspen2 = bytearray(257)
+    rec_aspen2[:8] = b'AspenTwo'
+    rec_aspen2[256] = 0x00
+    with open(pld_path, 'ab') as pf:
+        pf.write(rec_aspen2)
+
+    clone_cred_payload = json.dumps({
+        "profile_name": "AspenTwo",
+        "target_online": True,
+        "clone_from": "Aspen"
+    }).encode('utf-8')
+    req = urllib.request.Request(f"{base_url}/api/switch-mode", data=clone_cred_payload, headers={"Content-Type": "application/json"})
+    cc_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
+    assert cc_res["success"] is True
+
+    aspen2_creds = core.get_profile_credentials(mock_save_root / "AspenTwo")
+    assert aspen2_creds["is_online"] is True
+    assert aspen2_creds["login_name"] == "TestPilot"
+    assert aspen2_creds["email"] == "pilot@example.com"
+    print(f"[+] 17. Tab 4 - Switch Mode with Credential Cloning: OK (Cloned from Aspen)")
+
+    # 18. Test Progression Cloning API (Tab 4)
+    clone_prog_payload = json.dumps({
+        "source_profile": "Aspen",
+        "target_profile": "AspenTwo",
+        "copy_keymap": False
+    }).encode('utf-8')
+    req = urllib.request.Request(f"{base_url}/api/clone-progression", data=clone_prog_payload, headers={"Content-Type": "application/json"})
+    cp_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
+    assert cp_res["success"] is True
+    assert "target_summary" in cp_res
+    assert cp_res["target_summary"]["profile_name"] == "AspenTwo"
+
+    # Verify transferred DATA has Driver.Name = AspenTwo
+    with open(aspen2_ps / "DATA", "rb") as df:
+        df_b = df.read()
+    dp_pt, _, _ = core.decrypt_save_file(df_b, "AspenTwo", "DATA")
+    _, dp_dict = core.decode_xmbf_to_dict(dp_pt)
+    assert dp_dict["Driver"]["Name"] == "AspenTwo"
+    print(f"[+] 18. Tab 4 - Progression Cloning API: OK (Transferred Aspen -> AspenTwo)")
+
+    # 19. Reset Save Directory back to Documents
+    reset_dir_payload = json.dumps({"reset": True}).encode('utf-8')
+    req = urllib.request.Request(f"{base_url}/api/save-directory", data=reset_dir_payload, headers={"Content-Type": "application/json"})
+    res_dir_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
+    assert res_dir_res["success"] is True
+    assert res_dir_res["custom_dir"] is None
+    print(f"[+] 19. Reset Save Directory to Default: OK")
+
+    # 20. Public Code Hygiene & Security Verification
+    assert not (TEST_DIR / ".env").exists()
+    assert (TEST_DIR / ".env.example").is_file()
+    env_example_content = (TEST_DIR / ".env.example").read_text(encoding='utf-8')
+    assert "your_api_key_here" in env_example_content or "placeholder" in env_example_content or "mock" in env_example_content
+    print(f"[+] 20. Public Code Hygiene Verification: OK (No real credentials, clean .env.example)")
+
     # Cleanup sandbox
     shutil.rmtree(sandbox_dir, ignore_errors=True)
 
     print("\n" + "=" * 68)
-    print("  ALL REVISION 2 BACKEND & ARCHITECTURE TESTS PASSED 100%!")
+    print("  ALL REVISION 2 (v2.0.2) FULL TOOLKIT INTEGRATION TESTS PASSED 100%!")
     print("=" * 68 + "\n")
 
 if __name__ == '__main__':
     run_tests()
+

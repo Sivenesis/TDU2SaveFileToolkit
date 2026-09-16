@@ -12,8 +12,11 @@ import zlib
 import struct
 import base64
 import json
+import shutil
 import argparse
 from pathlib import Path
+
+__version__ = "2.0.2"
 
 # ==============================================================================
 # 1. EMBEDDED CRYPTOGRAPHIC CONSTANTS & TABLES
@@ -1040,11 +1043,11 @@ def edit_player_profile(data_dict, money=None, casino_points=None, level=None, r
 
     changes = []
     if money is not None:
-        driver['Money'] = max(0, min(999999999, int(money)))
+        driver['Money'] = max(0, min(2147483648, int(money)))
         changes.append(f"Money: ${driver['Money']:,}")
 
     if casino_points is not None:
-        driver['NbCoupon'] = max(0, min(999999999, int(casino_points)))
+        driver['NbCoupon'] = max(0, min(2147483648, int(casino_points)))
         changes.append(f"Casino Points: {driver['NbCoupon']:,} Cp")
 
     if level is not None:
@@ -1433,13 +1436,507 @@ def cmd_edit(args):
 
 
 # ==============================================================================
-# 7. MAIN CLI PARSER
+# 7. PROFILE REGISTRY & ONLINE STATUS MANAGEMENT
+# ==============================================================================
+
+def find_default_savegame_dir():
+    """Locates the TDU2 savegame directory in Documents or search paths."""
+    userprofile = os.environ.get('USERPROFILE')
+    if userprofile:
+        docs_cand = Path(userprofile) / 'Documents' / 'Eden Games' / 'Test Drive Unlimited 2' / 'savegame'
+        if docs_cand.is_dir():
+            return docs_cand
+    user_home = Path.home() / 'Documents' / 'Eden Games' / 'Test Drive Unlimited 2' / 'savegame'
+    if user_home.is_dir():
+        return user_home
+    return None
+
+def read_profile_list(profile_list_path: Path):
+    """
+    Parses ProfileList.dat into a list of profile records:
+    [{"index": int, "name": str, "is_online": bool, "flag_byte": int, "raw_offset": int}, ...]
+    """
+    if not profile_list_path.is_file():
+        return None, []
+
+    with open(profile_list_path, 'rb') as f:
+        data = f.read()
+
+    if len(data) < 10:
+        return None, []
+
+    header = data[:10]
+    num_records = (len(data) - 10) // 257
+    records = []
+
+    for i in range(num_records):
+        start = 10 + i * 257
+        rec = data[start : start + 257]
+        name = rec[:256].split(b'\x00')[0].decode('latin1', errors='ignore')
+        flag = rec[256]
+        records.append({
+            "index": i,
+            "name": name,
+            "is_online": (flag == 0xFF),
+            "flag_byte": flag,
+            "raw_offset": start
+        })
+
+    return header, records
+
+def patch_profile_list_flag(profile_list_path: Path, profile_name: str, make_online: bool, backup: bool = True):
+    """
+    Updates the 257th byte flag in ProfileList.dat for the specified profile.
+    0xFF = Online, 0x00 = Offline.
+    """
+    with open(profile_list_path, 'rb') as f:
+        data = bytearray(f.read())
+
+    if len(data) < 10:
+        raise ValueError("Corrupt ProfileList.dat")
+
+    if backup:
+        bak_file = profile_list_path.with_suffix('.bak')
+        with open(bak_file, 'wb') as bf:
+            bf.write(data)
+
+    num_records = (len(data) - 10) // 257
+    matched = False
+    for i in range(num_records):
+        start = 10 + i * 257
+        rec_name = bytes(data[start : start + 256]).split(b'\x00')[0].decode('latin1', errors='ignore')
+        if rec_name.lower() == profile_name.lower():
+            data[start + 256] = 0xFF if make_online else 0x00
+            matched = True
+            break
+
+    if not matched:
+        new_rec = bytearray(257)
+        name_bytes = profile_name.encode('latin1')[:255]
+        new_rec[:len(name_bytes)] = name_bytes
+        new_rec[256] = 0xFF if make_online else 0x00
+        data.extend(new_rec)
+
+    with open(profile_list_path, 'wb') as f:
+        f.write(data)
+
+    return True
+
+def patch_options_online(options_path: Path, profile_name: str, make_online: bool, login_name: str = None, email: str = None, password: str = None, backup: bool = True):
+    """
+    Toggles IsOnlineEnabledProfile in OPTIONS between True and False, preserving container footers.
+    """
+    if not options_path.is_file():
+        raise FileNotFoundError(f"OPTIONS file not found at {options_path}")
+
+    with open(options_path, 'rb') as f:
+        raw_bytes = f.read()
+
+    if backup:
+        bak_file = options_path.with_suffix('.bak')
+        with open(bak_file, 'wb') as bf:
+            bf.write(raw_bytes)
+
+    xmbf, footer, _ = decrypt_save_file(raw_bytes, profile_name, 'OPTIONS')
+    root_name, opt_obj = decode_xmbf_to_dict(xmbf)
+
+    opt_obj['IsOnlineEnabledProfile'] = bool(make_online)
+    if make_online:
+        if login_name: opt_obj['LoginName'] = str(login_name)
+        if email is not None: opt_obj['Email'] = str(email)
+        if password is not None: opt_obj['Password'] = str(password)
+
+    new_xmbf = encode_dict_to_xmbf(xmbf, {root_name: opt_obj}, root_name)
+    enc_data = encrypt_save_file(new_xmbf, profile_name, 'OPTIONS', original_footer=footer)
+
+    with open(options_path, 'wb') as f:
+        f.write(enc_data)
+
+    return True
+
+def convert_data_file(src_data_path: Path, dst_data_path: Path, src_profile_name: str, dst_profile_name: str, make_online: bool, ref_footer: bytes = None, ref_extends: list = None, backup: bool = True):
+    """
+    Converts and re-keys DATA progression file from src_profile to dst_profile.
+    """
+    if not src_data_path.is_file():
+        raise FileNotFoundError(f"DATA file not found at {src_data_path}")
+
+    with open(src_data_path, 'rb') as f:
+        raw_bytes = f.read()
+
+    if backup and dst_data_path.is_file():
+        bak_file = dst_data_path.with_suffix('.bak')
+        with open(bak_file, 'wb') as bf:
+            bf.write(dst_data_path.read_bytes())
+
+    xmbf, src_footer, _ = decrypt_save_file(raw_bytes, src_profile_name, 'DATA')
+    root_name, data_obj = decode_xmbf_to_dict(xmbf)
+
+    driver = data_obj.setdefault('Driver', {})
+    driver['Name'] = dst_profile_name
+    driver['MustClearOnlineDatas'] = False
+
+    if make_online and ref_extends:
+        data_obj['Extends'] = list(ref_extends)
+
+    new_xmbf = encode_dict_to_xmbf(xmbf, {root_name: data_obj}, root_name)
+    footer = ref_footer if ref_footer else src_footer
+
+    enc_data = encrypt_save_file(new_xmbf, dst_profile_name, 'DATA', original_footer=footer)
+    dst_data_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(dst_data_path, 'wb') as f:
+        f.write(enc_data)
+
+    return True
+
+def get_profile_credentials(profile_identifier, savegame_root: Path = None):
+    """
+    Reads and decrypts OPTIONS from a profile to extract stored online credentials.
+    Returns: {"login_name": str, "email": str, "password": str, "is_online": bool}
+    """
+    p = Path(profile_identifier)
+    opt_file = None
+    pname = None
+
+    if p.is_file() and p.name.upper() == 'OPTIONS':
+        opt_file = p
+        pname = p.parent.parent.name if p.parent.name.upper() == 'PLAYERSAVE' else p.parent.name
+    elif (p / 'PLAYERSAVE' / 'OPTIONS').is_file():
+        opt_file = p / 'PLAYERSAVE' / 'OPTIONS'
+        pname = p.name
+    elif (p / 'OPTIONS').is_file():
+        opt_file = p / 'OPTIONS'
+        pname = p.parent.name if p.name.upper() == 'PLAYERSAVE' else p.name
+    else:
+        root = savegame_root or find_default_savegame_dir()
+        if root:
+            cand = root / str(profile_identifier) / 'PLAYERSAVE' / 'OPTIONS'
+            if cand.is_file():
+                opt_file = cand
+                pname = str(profile_identifier)
+
+    if not opt_file or not opt_file.is_file():
+        raise FileNotFoundError(f"Could not locate OPTIONS file for '{profile_identifier}'")
+
+    with open(opt_file, 'rb') as f:
+        b = f.read()
+
+    candidates = []
+    if pname:
+        candidates.append(pname)
+    for c in [p.name, p.parent.name, getattr(opt_file.parent, 'name', None), getattr(opt_file.parent.parent, 'name', None)]:
+        if c and c.upper() not in ['OPTIONS', 'PLAYERSAVE'] and c not in candidates:
+            candidates.append(c)
+
+    for ancestor in [opt_file.parent, opt_file.parent.parent, opt_file.parent.parent.parent]:
+        if ancestor and ancestor.is_dir():
+            pl_cand = ancestor / 'ProfileList.dat'
+            if pl_cand.is_file():
+                try:
+                    _, recs = read_profile_list(pl_cand)
+                    for r in recs:
+                        if r.get('name') and r['name'] not in candidates:
+                            candidates.append(r['name'])
+                except Exception:
+                    pass
+
+    xmbf = None
+    last_err = None
+    for cand_name in candidates:
+        try:
+            xmbf, _, _ = decrypt_save_file(b, cand_name, 'OPTIONS')
+            break
+        except Exception as e:
+            last_err = e
+
+    if xmbf is None:
+        raise last_err or ValueError(f"Failed to decrypt OPTIONS for '{profile_identifier}'")
+
+    _, opt_dict = decode_xmbf_to_dict(xmbf)
+
+    return {
+        "login_name": opt_dict.get('LoginName', '') or '',
+        "email": opt_dict.get('Email', '') or '',
+        "password": opt_dict.get('Password', '') or '',
+        "is_online": bool(opt_dict.get('IsOnlineEnabledProfile', False))
+    }
+
+def switch_profile_mode(
+    profile_name: str,
+    savegame_root: Path = None,
+    target_online: bool = None,
+    login_name: str = None,
+    email: str = None,
+    password: str = None,
+    clone_from: str = None
+):
+    """
+    Toggles or sets a profile between Online and Offline.
+    Updates both ProfileList.dat and OPTIONS container cleanly with backups.
+    """
+    root = savegame_root or find_default_savegame_dir()
+    if not root or not root.is_dir():
+        raise FileNotFoundError(f"Savegame directory not found: {root}")
+
+    prof_dir = root / profile_name
+    ps_dir = (prof_dir / 'PLAYERSAVE') if (prof_dir / 'PLAYERSAVE').is_dir() else prof_dir
+    if not (ps_dir / 'DATA').is_file() and not (ps_dir / 'OPTIONS').is_file():
+        raise FileNotFoundError(f"Neither DATA nor OPTIONS savefile found for profile '{profile_name}' at {ps_dir}")
+
+    profile_list_path = root / 'ProfileList.dat'
+    curr_online = False
+
+    options_path = ps_dir / 'OPTIONS'
+    if options_path.is_file():
+        try:
+            with open(options_path, 'rb') as of:
+                ob = of.read()
+            ox, _, _ = decrypt_save_file(ob, profile_name, 'OPTIONS')
+            _, od = decode_xmbf_to_dict(ox)
+            curr_online = bool(od.get('IsOnlineEnabledProfile', False))
+        except Exception:
+            pass
+
+    new_mode = not curr_online if target_online is None else bool(target_online)
+
+    if new_mode:
+        if clone_from:
+            cloned = get_profile_credentials(clone_from, root)
+            login_name = login_name or cloned.get('login_name') or profile_name
+            email = email if email is not None else cloned.get('email', '')
+            password = password if password is not None else cloned.get('password', '')
+        elif email or password or login_name:
+            login_name = login_name or profile_name
+        else:
+            login_name = login_name or profile_name
+            email = email or ""
+            password = password or ""
+
+    if profile_list_path.is_file():
+        patch_profile_list_flag(profile_list_path, profile_name, new_mode, backup=True)
+
+    if options_path.is_file():
+        patch_options_online(
+            options_path=options_path,
+            profile_name=profile_name,
+            make_online=new_mode,
+            login_name=login_name,
+            email=email,
+            password=password,
+            backup=True
+        )
+
+    cred_info = ""
+    if new_mode and clone_from:
+        cred_info = f" (Credentials cloned from '{clone_from}')"
+    elif new_mode and (email or password):
+        cred_info = " (Custom credentials applied)"
+
+    return {
+        "success": True,
+        "profile": profile_name,
+        "old_mode": "ONLINE" if curr_online else "OFFLINE",
+        "new_mode": "ONLINE" if new_mode else "OFFLINE",
+        "cloned_from": clone_from if (new_mode and clone_from) else None,
+        "message": f"Successfully switched profile '{profile_name}' from {'ONLINE' if curr_online else 'OFFLINE'} to {'ONLINE' if new_mode else 'OFFLINE'}{cred_info}."
+    }
+
+def clone_progression(
+    src_profile: str,
+    dst_profile: str,
+    savegame_root: Path = None,
+    copy_keymap: bool = True,
+    backup: bool = True
+):
+    """
+    Clones gameplay progression (DATA savefile: cars, cash, licenses, houses, discovery)
+    from src_profile into dst_profile, preserving dst_profile's online registration,
+    server nickname, 8-byte Profile UUID, DLC tokens (Extends), and account credentials.
+    """
+    root = savegame_root or find_default_savegame_dir()
+    if not root or not root.is_dir():
+        raise FileNotFoundError(f"Savegame directory not found: {root}")
+
+    if src_profile.lower() == dst_profile.lower():
+        raise ValueError("Source profile and destination profile cannot be the same.")
+
+    src_dir = root / src_profile
+    dst_dir = root / dst_profile
+
+    src_ps = (src_dir / 'PLAYERSAVE') if (src_dir / 'PLAYERSAVE').is_dir() else src_dir
+    dst_ps = (dst_dir / 'PLAYERSAVE') if (dst_dir / 'PLAYERSAVE').is_dir() else dst_dir
+
+    src_data_file = src_ps / 'DATA'
+    dst_data_file = dst_ps / 'DATA'
+
+    if not src_data_file.is_file():
+        raise FileNotFoundError(f"Source DATA file not found for '{src_profile}' at {src_data_file}")
+    if not dst_data_file.is_file():
+        raise FileNotFoundError(f"Destination DATA file not found for '{dst_profile}' at {dst_data_file}")
+
+    with open(dst_data_file, 'rb') as df:
+        dst_bytes = df.read()
+    dst_xmbf, dst_footer, _ = decrypt_save_file(dst_bytes, dst_profile, 'DATA')
+    dst_root, dst_dict = decode_xmbf_to_dict(dst_xmbf)
+    dst_extends = dst_dict.get('Extends', [])
+
+    with open(src_data_file, 'rb') as sf:
+        src_bytes = sf.read()
+    src_xmbf, _, _ = decrypt_save_file(src_bytes, src_profile, 'DATA')
+    src_root, src_dict = decode_xmbf_to_dict(src_xmbf)
+
+    cloned_dict = dict(src_dict)
+    driver = cloned_dict.setdefault('Driver', {})
+    driver['Name'] = dst_profile
+    driver['MustClearOnlineDatas'] = False
+
+    if dst_extends:
+        cloned_dict['Extends'] = list(dst_extends)
+
+    new_xmbf = encode_dict_to_xmbf(src_xmbf, {src_root: cloned_dict}, src_root)
+    enc_data = encrypt_save_file(new_xmbf, dst_profile, 'DATA', original_footer=dst_footer)
+
+    if backup:
+        bak_file = dst_data_file.with_suffix('.bak')
+        with open(bak_file, 'wb') as bf:
+            bf.write(dst_bytes)
+
+    with open(dst_data_file, 'wb') as df:
+        df.write(enc_data)
+
+    keymap_copied = False
+    src_km = src_ps / 'KEYMAP'
+    dst_km = dst_ps / 'KEYMAP'
+    if copy_keymap and src_km.is_file() and dst_km.is_file():
+        try:
+            with open(dst_km, 'rb') as dkf:
+                dst_km_b = dkf.read()
+            _, dst_km_foot, _ = decrypt_save_file(dst_km_b, dst_profile, 'KEYMAP')
+
+            with open(src_km, 'rb') as skf:
+                src_km_b = skf.read()
+            skm_x, _, _ = decrypt_save_file(src_km_b, src_profile, 'KEYMAP')
+            skm_root, skm_dict = decode_xmbf_to_dict(skm_x)
+
+            new_km_x = encode_dict_to_xmbf(skm_x, {skm_root: skm_dict}, skm_root)
+            enc_km = encrypt_save_file(new_km_x, dst_profile, 'KEYMAP', original_footer=dst_km_foot)
+
+            if backup:
+                with open(dst_km.with_suffix('.bak'), 'wb') as bkf:
+                    bkf.write(dst_km_b)
+            with open(dst_km, 'wb') as dkf:
+                dkf.write(enc_km)
+            keymap_copied = True
+        except Exception:
+            pass
+
+    km_msg = " and custom control bindings" if keymap_copied else ""
+    return {
+        "success": True,
+        "source": src_profile,
+        "target": dst_profile,
+        "keymap_copied": keymap_copied,
+        "message": f"Successfully cloned progression{km_msg} from '{src_profile}' into '{dst_profile}'. Online nickname, Profile UUID, and credentials preserved."
+    }
+
+def scan_all_profiles(savegame_root: Path = None):
+    """
+    Scans the savegame folder for all profiles, cross-referencing ProfileList.dat and PLAYERSAVE.
+    """
+    root = savegame_root or find_default_savegame_dir()
+    if not root or not root.is_dir():
+        return [], root
+
+    profile_list_path = root / 'ProfileList.dat'
+    _, reg_records = read_profile_list(profile_list_path) if profile_list_path.is_file() else (None, [])
+    reg_map = {r['name'].lower(): r for r in reg_records}
+
+    profiles = []
+    for item in root.iterdir():
+        if item.is_dir() and item.name not in ['.', '..']:
+            ps_dir = (item / 'PLAYERSAVE') if (item / 'PLAYERSAVE').is_dir() else item
+            has_data = (ps_dir / 'DATA').is_file()
+            has_opt = (ps_dir / 'OPTIONS').is_file()
+            has_km = (ps_dir / 'KEYMAP').is_file()
+            if not has_data and not has_opt:
+                continue
+
+            pname = item.name
+            reg_entry = reg_map.get(pname.lower())
+            reg_is_online = reg_entry['is_online'] if reg_entry else None
+
+            opt_is_online = None
+            has_creds = False
+            email_val = ""
+            if has_opt:
+                try:
+                    with open(ps_dir / 'OPTIONS', 'rb') as of:
+                        opt_b = of.read()
+                    ox, _, _ = decrypt_save_file(opt_b, pname, 'OPTIONS')
+                    _, o_dict = decode_xmbf_to_dict(ox)
+                    opt_is_online = o_dict.get('IsOnlineEnabledProfile')
+                    email_val = o_dict.get('Email', '') or ''
+                    pwd_val = o_dict.get('Password', '') or ''
+                    has_creds = bool(email_val or pwd_val)
+                except Exception:
+                    pass
+
+            is_online = reg_is_online if reg_is_online is not None else (opt_is_online if opt_is_online is not None else False)
+
+            profiles.append({
+                "name": pname,
+                "path": str(item),
+                "is_online": bool(is_online),
+                "reg_flag": "0xFF (Online)" if reg_is_online else ("0x00 (Offline)" if reg_is_online is not None else "Not Registered"),
+                "options_flag": bool(opt_is_online) if opt_is_online is not None else "Unknown",
+                "has_credentials": has_creds,
+                "email": email_val,
+                "has_data": has_data,
+                "has_options": has_opt,
+                "has_keymap": has_km
+            })
+
+    return profiles, root
+
+
+# CLI Handlers for Online Status
+def cmd_switch(args):
+    root = Path(args.dir).resolve() if getattr(args, 'dir', None) else find_default_savegame_dir()
+    mode = getattr(args, 'mode', 'switch')
+    target_online = True if mode == 'online' else (False if mode == 'offline' else None)
+    res = switch_profile_mode(
+        profile_name=args.profile,
+        savegame_root=root,
+        target_online=target_online,
+        login_name=getattr(args, 'login', None),
+        email=getattr(args, 'email', None),
+        password=getattr(args, 'password', None),
+        clone_from=getattr(args, 'clone_from', None)
+    )
+    print(f"[*] {res['message']}")
+
+def cmd_clone_progression(args):
+    root = Path(args.dir).resolve() if getattr(args, 'dir', None) else find_default_savegame_dir()
+    res = clone_progression(
+        src_profile=args.source,
+        dst_profile=args.target,
+        savegame_root=root,
+        copy_keymap=not getattr(args, 'no_keymap', False),
+        backup=not getattr(args, 'no_backup', False)
+    )
+    print(f"[*] {res['message']}")
+
+
+# ==============================================================================
+# 8. MAIN CLI PARSER
 # ==============================================================================
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test Drive Unlimited 2 (TDU2) Save Game Tool - Decrypt, Unpack, Edit, Repack."
+        description=f"Test Drive Unlimited 2 (TDU2) Save Game Tool v{__version__} - Decrypt, Unpack, Edit, Repack, and Online Mode Switcher."
     )
+    parser.add_argument('-v', '--version', action='version', version=f"TDU2 Save Game Tool v{__version__}")
     parser.add_argument('-p', '--profile', type=str, help="Player profile name (e.g. Player). Auto-detected if omitted.")
 
     subparsers = parser.add_subparsers(dest='command', required=True)
@@ -1487,6 +1984,24 @@ def main():
     p_edit.add_argument('--tune-braking', type=int, choices=[0, 1, 2, 3, 4], help="Set braking tuning level (0-4).")
     p_edit.add_argument('--unlock-furniture', action='store_true', help="Unlock all 383 furniture items, 61 materials, and Casino VIP furniture set.")
 
+    # switch
+    p_switch = subparsers.add_parser('switch', help="Switch profile between Online and Offline mode.")
+    p_switch.add_argument('profile', type=str, help="Profile name to switch.")
+    p_switch.add_argument('--mode', choices=['online', 'offline', 'switch'], default='switch', help="Target mode (default: switch/toggle).")
+    p_switch.add_argument('--dir', type=str, default=None, help="Path to TDU2 savegame folder.")
+    p_switch.add_argument('--login', type=str, default=None, help="Online login name.")
+    p_switch.add_argument('--email', type=str, default=None, help="Online account email/username.")
+    p_switch.add_argument('--password', type=str, default=None, help="Online account password.")
+    p_switch.add_argument('--clone-from', type=str, default=None, help="Profile name to clone credentials from.")
+
+    # clone-progression
+    p_clonp = subparsers.add_parser('clone-progression', help="Clone offline progress into registered online profile.")
+    p_clonp.add_argument('source', type=str, help="Source profile (copy progression from).")
+    p_clonp.add_argument('target', type=str, help="Target online profile (inject progression into).")
+    p_clonp.add_argument('--dir', type=str, default=None, help="Path to TDU2 savegame folder.")
+    p_clonp.add_argument('--no-keymap', action='store_true', help="Do not copy control keymap.")
+    p_clonp.add_argument('--no-backup', action='store_true', help="Do not make automatic backups.")
+
     args = parser.parse_args()
 
     if args.command == 'unpack':
@@ -1501,6 +2016,10 @@ def main():
         cmd_verify(args)
     elif args.command == 'edit':
         cmd_edit(args)
+    elif args.command == 'switch':
+        cmd_switch(args)
+    elif args.command == 'clone-progression':
+        cmd_clone_progression(args)
 
 if __name__ == '__main__':
     main()

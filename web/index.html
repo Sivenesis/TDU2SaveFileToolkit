@@ -37,8 +37,8 @@
           </svg>
         </div>
         <div class="brand-text">
-          <div class="brand-title">TDU2 SAVE FILE TOOLKIT</div>
-          <div class="brand-subtitle">Test Drive Unlimited 2 • Profile, Garage & Save Editor</div>
+          <div class="brand-title">TDU2 SAVE FILE TOOLKIT <span class="brand-version-badge">v2.0.2</span></div>
+          <div class="brand-subtitle">Test Drive Unlimited 2 • Profile, Garage, Save Editor & Online Switcher</div>
         </div>
       </div>
 
@@ -47,6 +47,10 @@
           <span class="status-dot" id="profileStatusDot"></span>
           <span class="label">PROFILE:</span>
           <span class="val" id="topProfileName">None Loaded</span>
+        </div>
+        <div class="status-pill" id="topOnlinePill">
+          <span class="label">MODE:</span>
+          <span class="val mode-tag-pill" id="topOnlineMode">--</span>
         </div>
         <div class="status-pill">
           <span class="label">BACKUPS:</span>
@@ -73,17 +77,31 @@
           <button class="btn btn-secondary" id="btnRefreshProfiles" title="Rescan folders">
             Rescan
           </button>
+          <button class="btn btn-secondary" id="btnOpenCustomPath" title="Specify custom savegame folder or profile directory">
+            Custom Path...
+          </button>
         </div>
       </div>
 
-      <div class="active-path-display">
-        <span class="path-label">Active Save:</span>
-        <span class="path-value" id="activePathText">No profile selected. Choose a profile from the dropdown and click
-          'Load Profile'.</span>
+      <div class="selector-subrow">
+        <div class="active-path-display">
+          <span class="path-label">Active Save:</span>
+          <span class="path-value" id="activePathText">No profile selected. Choose a profile from the dropdown and click 'Load Profile'.</span>
+        </div>
+        <div class="save-path-helper" id="savePathHelper">
+          <span class="helper-text">Can't see your profiles?</span>
+          <button type="button" class="link-btn" id="btnSpecifyPathPrompt">Specify custom savegame or profile path &rarr;</button>
+        </div>
+      </div>
+
+      <div class="custom-path-banner" id="customPathActiveBanner" style="display: none;">
+        <span class="badge badge-custom-active">Custom Location Active</span>
+        <code class="custom-path-val" id="customPathBannerText"></code>
+        <button type="button" class="btn btn-xs btn-outline" id="btnResetToDefaultDocs">Reset to Documents</button>
       </div>
     </section>
 
-    <!-- Navigation Tabs (Strictly 3 Tabs) -->
+    <!-- Navigation Tabs (4 Tabs) -->
     <nav class="app-tabs">
       <button class="tab-btn active" data-tab="tab-profile">
         Player Profile Editor
@@ -93,6 +111,9 @@
       </button>
       <button class="tab-btn" data-tab="tab-save-tools">
         Save Files Manipulation
+      </button>
+      <button class="tab-btn" data-tab="tab-online-switch">
+        Online Mode Switcher
       </button>
     </nav>
 
@@ -134,6 +155,18 @@
               <span class="badge" id="driverBadge">Driver: --</span>
             </div>
 
+            <!-- Online Mode Status Banner & Quick Switcher -->
+            <div class="online-status-banner-card">
+              <div class="online-status-left">
+                <span class="status-indicator-tag">SAVE MODE:</span>
+                <span class="mode-tag-badge mode-badge-offline" id="tab1ModeBadge">OFFLINE</span>
+                <span class="mode-explanation" id="tab1ModeExplanation">Single-player offline profile. Game runs offline without multiplayer server login prompts.</span>
+              </div>
+              <div class="online-status-right">
+                <button type="button" class="btn btn-sm btn-secondary" id="btnTab1ToggleOnline">Switch to Online Mode</button>
+              </div>
+            </div>
+
             <!-- Objectives Notice (Feature In Development) -->
             <div class="objectives-notice-banner">
               <div class="notice-icon">
@@ -154,20 +187,20 @@
               <div class="form-grid-3">
                 <div class="form-group">
                   <label for="inputMoney">Driver Money ($)</label>
-                  <input type="number" id="inputMoney" class="custom-input" min="0" max="999999999"
+                  <input type="number" id="inputMoney" class="custom-input" min="0" max="2147483648"
                     placeholder="e.g. 50000000">
                   <div class="input-hint-row">
-                    <span class="input-hint input-hint-muted">Max: $999,999,999</span>
+                    <span class="input-hint input-hint-muted">Max: $2,147,483,648</span>
                     <span class="input-hint" id="moneyFormattedHint">$0</span>
                   </div>
                 </div>
 
                 <div class="form-group">
                   <label for="inputCasinoPoints">Casino Points (Cp)</label>
-                  <input type="number" id="inputCasinoPoints" class="custom-input" min="0" max="999999999"
+                  <input type="number" id="inputCasinoPoints" class="custom-input" min="0" max="2147483648"
                     placeholder="e.g. 1000000">
                   <div class="input-hint-row">
-                    <span class="input-hint input-hint-muted">Max: 999,999,999 Cp</span>
+                    <span class="input-hint input-hint-muted">Max: 2,147,483,648 Cp</span>
                     <span class="input-hint" id="casinoFormattedHint">0 Cp</span>
                   </div>
                 </div>
@@ -187,37 +220,28 @@
             </form>
           </div>
 
-          <!-- Furniture & House Decor Unlocker (All-In-One) -->
+          <!-- Casino Furniture Unlocker -->
           <div class="glass-card editor-card">
             <div class="card-header">
-              <h3>Furniture & House Interior Decor</h3>
-              <span class="badge" id="furnitureBadge">383 Items • 61 Materials</span>
+              <h3>Casino Furniture</h3>
+              <span class="badge" id="furnitureBadge">Casino Exclusive</span>
             </div>
 
             <div class="furniture-content">
               <p class="section-desc">
-                Unlock all authentic catalog furniture items, living & garage materials, and the exclusive Casino VIP
-                furniture set for your residences.
+                Unlock all exclusive Casino furniture items for your residences.
               </p>
 
-              <div class="stats-row">
-                <div class="stat-mini">
-                  <div class="stat-mini-val" id="statFurnCount">-- / 383</div>
-                  <div class="stat-mini-lbl">Furniture Items</div>
-                </div>
-                <div class="stat-mini">
-                  <div class="stat-mini-val" id="statMatsCount">-- / 61</div>
-                  <div class="stat-mini-lbl">Interior Materials</div>
-                </div>
-                <div class="stat-mini">
-                  <div class="stat-mini-val" id="statCasinoVip">--</div>
-                  <div class="stat-mini-lbl">Casino VIP Suite</div>
+              <div class="stats-row casino-furniture-row">
+                <div class="stat-mini stat-mini-wide">
+                  <div class="stat-mini-val" id="statCasinoFurniture">--</div>
+                  <div class="stat-mini-lbl">Casino Furniture Status</div>
                 </div>
               </div>
 
               <div class="furniture-actions">
-                <button type="button" class="btn btn-primary btn-lg" id="btnUnlockAllFurniture">
-                  Unlock All Furniture & Materials
+                <button type="button" class="btn btn-primary btn-lg" id="btnUnlockCasinoFurniture">
+                  Unlock Casino Furniture
                 </button>
               </div>
             </div>
@@ -332,7 +356,143 @@
         </div>
       </section>
 
+      <!-- ==================== TAB 4: ONLINE MODE SWITCHER ==================== -->
+      <section class="tab-pane" id="tab-online-switch">
+        <div class="pipeline-banner">
+          <div class="banner-title">Online vs. Offline Profile Architecture & Progression Transfer</div>
+          <div class="banner-body">
+            TDU2 stores online profile status in byte 256 of <code>ProfileList.dat</code> (<code>0xFF</code> = Online, <code>0x00</code> = Offline)
+            and <code>IsOnlineEnabledProfile</code> in the encrypted <code>OPTIONS</code> container.<br>
+            Use this panel to switch profiles between Online and Offline, configure credentials, or clone progression from an offline save directly into an authentic, server-registered online profile.
+          </div>
+        </div>
+
+        <div class="online-switcher-layout">
+          <!-- Profiles Mode Table Card -->
+          <div class="glass-card editor-card">
+            <div class="card-header">
+              <h3>Registered Profiles & Mode Status</h3>
+              <span class="badge" id="onlineProfileCountBadge">0 Profiles</span>
+            </div>
+            <div class="tool-card-body">
+              <p class="section-desc">
+                Click <strong>Switch to Online</strong> or <strong>Switch to Offline</strong> on any profile. Automatic safety backups are created in <code>Backups/&lt;Profile&gt;/</code> prior to modification.
+              </p>
+              <div class="table-wrapper">
+                <table class="custom-table" id="onlineProfilesTable">
+                  <thead>
+                    <tr>
+                      <th>Profile Name</th>
+                      <th>Current Mode</th>
+                      <th>ProfileList.dat Flag</th>
+                      <th>OPTIONS Container</th>
+                      <th>Saved Credentials</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="onlineProfilesTableBody">
+                    <tr>
+                      <td colspan="6" class="table-empty">Scanning savegame profiles...</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Credentials Configuration Card -->
+          <div class="glass-card editor-card">
+            <div class="card-header">
+              <h3>Online Credentials Configuration</h3>
+              <span class="badge">Applied when switching to Online</span>
+            </div>
+            <div class="tool-card-body creds-config-body">
+              <p class="section-desc">
+                When switching a profile from Offline to Online, the game requires multiplayer credentials in the <code>OPTIONS</code> container.
+                You can clone credentials from an existing profile with saved credentials, or enter custom credentials.
+              </p>
+
+              <div class="cred-mode-options">
+                <div class="cred-option-block">
+                  <label class="radio-label">
+                    <input type="radio" name="credMode" value="clone" checked id="credModeClone">
+                    <strong>Clone credentials from an existing profile:</strong>
+                  </label>
+                  <div class="cred-input-wrap">
+                    <select id="credCloneSelect" class="custom-select">
+                      <option value="">-- Select a profile to clone credentials from --</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="cred-option-block">
+                  <label class="radio-label">
+                    <input type="radio" name="credMode" value="custom" id="credModeCustom">
+                    <strong>Provide custom account credentials:</strong>
+                  </label>
+                  <div class="form-grid-3 cred-manual-grid">
+                    <div class="form-group">
+                      <label for="credLoginName">Online Login / Nickname</label>
+                      <input type="text" id="credLoginName" class="custom-input" placeholder="Display name (Defaults to profile name)" disabled>
+                    </div>
+                    <div class="form-group">
+                      <label for="credEmail">Account Email / Username</label>
+                      <input type="text" id="credEmail" class="custom-input" placeholder="e.g. user_12345@example.com" disabled>
+                    </div>
+                    <div class="form-group">
+                      <label for="credPassword">Account Password</label>
+                      <input type="password" id="credPassword" class="custom-input" placeholder="Account password" disabled>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Progression Transfer Card -->
+          <div class="glass-card editor-card">
+            <div class="card-header">
+              <h3>Clone Profile Progression (Transfer Save to Online Account)</h3>
+              <span class="badge">Fixes "Invalid Nickname" Server Rejection</span>
+            </div>
+            <div class="tool-card-body progression-body">
+              <p class="section-desc">
+                TDU2 multiplayer and community servers validate registered nicknames. If an offline profile cannot connect because its nickname is not registered on the multiplayer server, transfer its full progression (cars, cash, houses, licenses, road discovery) into an already-registered online profile.<br><br>
+                The target profile's online server nickname, 8-byte Profile UUID, DLC tokens (<code>Extends</code>), and login credentials are 100% preserved.
+              </p>
+              <div class="form-grid-2 prog-controls-grid">
+                <div class="form-group">
+                  <label for="progSourceSelect">Source Profile (Copy progression from):</label>
+                  <select id="progSourceSelect" class="custom-select">
+                    <option value="">-- Select Source Profile --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="progTargetSelect">Target Profile (Inject progression into):</label>
+                  <select id="progTargetSelect" class="custom-select">
+                    <option value="">-- Select Target Online Profile --</option>
+                  </select>
+                </div>
+              </div>
+              <div class="prog-options-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="progCopyKeymap" checked>
+                  <span>Also copy custom keyboard and wheel control bindings (KEYMAP)</span>
+                </label>
+              </div>
+              <div class="prog-actions">
+                <button type="button" class="btn btn-primary btn-lg" id="btnExecuteCloneProg">
+                  Transfer Progression to Online Profile
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
     </main>
+
 
     <!-- Collapsible Diagnostic Console / Event Log Drawer -->
     <section class="console-drawer" id="consoleDrawer">
@@ -358,15 +518,42 @@
     <!-- Footer -->
     <footer class="main-footer">
       <div class="footer-left">
-        <span>TDU2 Save File Toolkit • 100% Self-Contained Offline Engine</span>
+        <span>TDU2 Save File Toolkit v2.0.2 • 100% Self-Contained Offline Engine • Zero Dependencies</span>
       </div>
       <div class="footer-right">
-        <span>DES-CBC • Eden-SHA1 Checksum • 359 Identified Vehicles</span>
+        <span>DES-CBC • Eden-SHA1 Checksum • 359 Identified Vehicles • Online Mode Switcher</span>
       </div>
     </footer>
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Custom Savegame / Profile Path Modal -->
+    <div class="modal-overlay" id="customPathModal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h4>Specify Custom Savegame or Profile Location</h4>
+          <button class="modal-close" id="customPathCloseBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="section-desc">
+            By default, the toolkit scans <code>Documents\Eden Games\Test Drive Unlimited 2\savegame</code>.<br>
+            If your game stores saves in another location (e.g. custom directory, portable install, or separate drive), enter the path below.
+          </p>
+          <div class="form-group">
+            <label for="customPathInput">Path to 'savegame' folder or specific profile folder:</label>
+            <input type="text" id="customPathInput" class="custom-input font-mono" placeholder="e.g. D:\Games\TDU2\savegame or C:\Saves\MyProfile">
+            <span class="input-hint">You can enter either the parent 'savegame' folder with all profiles, or a specific profile / PLAYERSAVE folder.</span>
+          </div>
+          <div class="current-path-status" id="currentCustomPathStatus"></div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="btnResetDocsInModal">Reset to Documents</button>
+          <button class="btn btn-secondary" id="customPathCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="btnApplyCustomPath">Apply & Scan</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Confirm Modal -->
     <div class="modal-overlay" id="confirmModal">

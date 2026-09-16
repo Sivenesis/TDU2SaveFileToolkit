@@ -310,9 +310,12 @@ Total Level = Racing Level + Collection Level + Social Level + Cruising Level
 
 Setting `Driver.Level` directly in `PlayerData.Driver` without exceeding 73 allows the player profile to display maximum prestige without corrupting leaderboard statistics.
 
+> [!NOTE]
+> **Known Issue:** Level editing doesn't work on online profiles (Work in progress). On online profiles, the game engine verifies experience points and sub-discipline achievements against server-side session sync, which overrides manual `Driver.Level` modifications.
+
 ### 8.2 Currency Caps
-- **Driver Money ($)**: Stored as a 32-bit signed integer in `Driver.Money`. Clamped between `0` and `999,999,999` to avoid integer overflow issues in the game's UI and physics engine.
-- **Casino Points (Cp)**: Stored as a 32-bit signed integer in `Driver.NbCoupon`. Clamped between `0` and `999,999,999`.
+- **Driver Money ($)**: Stored as a 32-bit integer in `Driver.Money`. Clamped between `0` and `2,147,483,648`.
+- **Casino Points (Cp)**: Stored as a 32-bit integer in `Driver.NbCoupon`. Clamped between `0` and `2,147,483,648`.
 
 ### 8.3 Furniture and Materials Unlocker
 - `PlayerData.MyHouse.SoldedFurnitures`: An array containing 383 integer entries representing catalog furniture items. Setting non-zero identifiers unlocks all pieces across all styles.

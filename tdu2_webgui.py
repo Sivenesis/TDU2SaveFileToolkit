@@ -22,6 +22,7 @@ from urllib.parse import urlparse, parse_qs
 # Import the core TDU2 save engine from local directory
 import tdu2_save_tool as core
 
+TOOLKIT_VERSION = "2.0.2"
 PORT = 8282
 WORKSPACE_DIR = Path(__file__).parent.resolve()
 WEB_DIR = WORKSPACE_DIR / 'web'
@@ -29,6 +30,9 @@ BACKUPS_DIR = WORKSPACE_DIR / 'Backups'
 BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
 DECRYPT_DIR = WORKSPACE_DIR / 'decrypt'
 DECRYPT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Custom savegame root or profile directory (configured at runtime or via API/CLI)
+CUSTOM_SAVEGAME_DIR = None
 
 # Global in-memory cache of currently loaded save state
 loaded_save_state = {
@@ -173,8 +177,8 @@ def get_profile_backups_list(profile_name: str) -> list:
 
 def find_all_tdu2_profiles():
     """
-    Scans Documents and local workspace for all valid TDU2 profile directories.
-    Completely sanitized: uses dynamic Path.home().
+    Scans Documents, custom paths, and local workspace for all valid TDU2 profile directories.
+    Extracts online mode flags (from ProfileList.dat & OPTIONS) and saved account credentials.
     """
     profiles = []
     seen_paths = set()
@@ -194,6 +198,8 @@ def find_all_tdu2_profiles():
         seen_paths.add(resolved)
         data_file = ps_dir / 'DATA'
         data_json = ps_dir / 'DATA.json'
+        opt_file = ps_dir / 'OPTIONS'
+        km_file = ps_dir / 'KEYMAP'
         bak_file = ps_dir / 'DATA.bak'
 
         prof_name = None
@@ -226,8 +232,82 @@ def find_all_tdu2_profiles():
             except Exception:
                 pass
 
-        tag = "Documents" if is_live else "Local"
-        display_label = f"{prof_name or resolved.name} [{tag}]"
+        # Online mode status analysis
+        opt_is_online = None
+        has_creds = False
+        email_val = ""
+        login_val = ""
+        if opt_file.is_file():
+            try:
+                creds_info = core.get_profile_credentials(ps_dir, savegame_root=ps_dir.parent)
+                opt_is_online = creds_info.get('is_online')
+                login_val = creds_info.get('login_name', '') or ''
+                email_val = creds_info.get('email', '') or ''
+                pwd_val = creds_info.get('password', '') or ''
+                has_creds = bool(email_val or pwd_val)
+            except Exception:
+                try:
+                    with open(opt_file, 'rb') as of:
+                        opt_b = of.read()
+                    ox, _, _ = core.decrypt_save_file(opt_b, prof_name, 'OPTIONS')
+                    _, o_dict = core.decode_xmbf_to_dict(ox)
+                    opt_is_online = o_dict.get('IsOnlineEnabledProfile')
+                    login_val = o_dict.get('LoginName', '') or ''
+                    email_val = o_dict.get('Email', '') or ''
+                    pwd_val = o_dict.get('Password', '') or ''
+                    has_creds = bool(email_val or pwd_val)
+                except Exception:
+                    pass
+
+        # Check ProfileList.dat in parent directories or known savegame root
+        reg_is_online = None
+        candidate_roots = [resolved, resolved.parent, resolved.parent.parent, ps_dir.parent, ps_dir.parent.parent]
+        if CUSTOM_SAVEGAME_DIR:
+            candidate_roots.extend([CUSTOM_SAVEGAME_DIR, CUSTOM_SAVEGAME_DIR.parent])
+        else:
+            def_root = core.find_default_savegame_dir()
+            if def_root:
+                candidate_roots.extend([def_root, def_root.parent])
+
+        name_candidates = set()
+        if prof_name:
+            name_candidates.add(prof_name.lower())
+        if resolved.name.upper() not in ['PLAYERSAVE', 'SAVEGAME']:
+            name_candidates.add(resolved.name.lower())
+        if resolved.parent and resolved.parent.name.upper() not in ['SAVEGAME', 'DOCUMENTS']:
+            name_candidates.add(resolved.parent.name.lower())
+        if ps_dir.parent and ps_dir.parent.name.upper() not in ['SAVEGAME', 'DOCUMENTS']:
+            name_candidates.add(ps_dir.parent.name.lower())
+
+        for cand_root in candidate_roots:
+            if cand_root and cand_root.is_dir():
+                pl_cand = cand_root / 'ProfileList.dat'
+                if pl_cand.is_file():
+                    try:
+                        _, reg_recs = core.read_profile_list(pl_cand)
+                        for r in reg_recs:
+                            if r.get('name') and r['name'].lower() in name_candidates:
+                                reg_is_online = r['is_online']
+                                break
+                    except Exception:
+                        pass
+            if reg_is_online is not None:
+                break
+
+        is_online = reg_is_online if reg_is_online is not None else (opt_is_online if opt_is_online is not None else False)
+        mode_tag = "Online" if is_online else "Offline"
+
+        display_label = f"{prof_name or resolved.name} [{mode_tag}]"
+
+        online_status_obj = {
+            "is_online": bool(is_online),
+            "mode_label": "ONLINE" if is_online else "OFFLINE",
+            "registry_online": reg_is_online,
+            "options_online": opt_is_online,
+            "has_credentials": has_creds,
+            "login_name": login_val or prof_name or "Player",
+            "email": email_val
+        }
 
         profiles.append({
             "id": str(resolved),
@@ -237,35 +317,62 @@ def find_all_tdu2_profiles():
             "money": money,
             "source": source_type,
             "is_live": is_live,
+            "is_online": bool(is_online),
+            "online_status": online_status_obj,
+            "reg_flag": "0xFF (Online)" if reg_is_online else ("0x00 (Offline)" if reg_is_online is not None else "Not Registered"),
+            "options_flag": bool(opt_is_online) if opt_is_online is not None else "Unknown",
+            "has_credentials": has_creds,
+            "email": email_val,
+            "login_name": login_val or prof_name or "Player",
             "path": str(ps_dir),
             "data_path": str(data_file) if data_file.is_file() else None,
             "has_data": data_file.is_file(),
+            "has_options": opt_file.is_file(),
+            "has_keymap": km_file.is_file(),
             "has_backup": bak_file.is_file(),
             "last_modified": last_mod
         })
 
-    # 1. Standard Windows Documents folder
-    try:
-        doc_saves = Path.home() / 'Documents' / 'Eden Games' / 'Test Drive Unlimited 2' / 'savegame'
-        if doc_saves.is_dir():
-            for p_dir in doc_saves.glob('*'):
-                if p_dir.is_dir() and not p_dir.name.startswith('.'):
-                    add_candidate(p_dir, "Documents (Live Game)", is_live=True)
-    except Exception:
-        pass
 
-    # 2. Local workspace folders
-    for local_name in ['PLAYERSAVE', 'examplesave']:
-        p_path = WORKSPACE_DIR / local_name
-        if p_path.is_dir():
-            if local_name == 'examplesave':
-                for sub in p_path.glob('*'):
-                    if sub.is_dir() and not sub.name.startswith('.'):
-                        add_candidate(sub, "Editor Folder (Example)", is_live=False)
+    # Strictly scan ONLY the current active save path:
+    if CUSTOM_SAVEGAME_DIR and CUSTOM_SAVEGAME_DIR.exists():
+        # Active path is CUSTOM_SAVEGAME_DIR: scan exclusively from this custom location
+        try:
+            if CUSTOM_SAVEGAME_DIR.is_file():
+                add_candidate(CUSTOM_SAVEGAME_DIR.parent, "Custom Path", is_live=False)
+            elif (CUSTOM_SAVEGAME_DIR / 'DATA').is_file() or (CUSTOM_SAVEGAME_DIR / 'PLAYERSAVE' / 'DATA').is_file():
+                add_candidate(CUSTOM_SAVEGAME_DIR, "Custom Path", is_live=False)
             else:
-                add_candidate(p_path, "Editor Folder (Local)", is_live=False)
+                for sub in CUSTOM_SAVEGAME_DIR.glob('*'):
+                    if sub.is_dir() and not sub.name.startswith('.'):
+                        add_candidate(sub, "Custom Path", is_live=False)
+        except Exception:
+            pass
+    else:
+        # Active path is standard Windows Documents savegame directory
+        try:
+            doc_saves = core.find_default_savegame_dir() or (Path.home() / 'Documents' / 'Eden Games' / 'Test Drive Unlimited 2' / 'savegame')
+            if doc_saves and doc_saves.is_dir():
+                for p_dir in doc_saves.glob('*'):
+                    if p_dir.is_dir() and not p_dir.name.startswith('.'):
+                        add_candidate(p_dir, "Documents", is_live=True)
+        except Exception:
+            pass
+
+        # Fallback to local workspace folders ONLY if Documents has zero profiles (e.g. clean dev/test environment)
+        if not profiles:
+            for local_name in ['PLAYERSAVE', 'examplesave', 'test_converted']:
+                p_path = WORKSPACE_DIR / local_name
+                if p_path.is_dir():
+                    if local_name == 'examplesave':
+                        for sub in p_path.glob('*'):
+                            if sub.is_dir() and not sub.name.startswith('.'):
+                                add_candidate(sub, "Local Example", is_live=False)
+                    else:
+                        add_candidate(p_path, "Local Workspace", is_live=False)
 
     return profiles
+
 
 
 # Authentic TDU2 Level Progression Thresholds (Extracted from db_data.dec.cpr & tduw_db_data.dec.cpr)
@@ -469,11 +576,38 @@ def extract_save_summary(data_obj, prof_name, source_path):
 
     backups_list = get_profile_backups_list(prof_name)
 
+    # Extract online status from OPTIONS if available
+    ps_dir = Path(source_path).parent
+    opt_file = ps_dir / 'OPTIONS'
+    active_online = False
+    active_login = driver.get('Name') or prof_name
+    active_email = ""
+    active_has_creds = False
+    if opt_file.is_file():
+        try:
+            with open(opt_file, 'rb') as of:
+                ob = of.read()
+            ox, _, _ = core.decrypt_save_file(ob, prof_name, 'OPTIONS')
+            _, od = core.decode_xmbf_to_dict(ox)
+            active_online = bool(od.get('IsOnlineEnabledProfile', False))
+            active_login = od.get('LoginName', '') or active_login
+            active_email = od.get('Email', '') or ''
+            active_has_creds = bool(active_email or od.get('Password'))
+        except Exception:
+            pass
+
     return {
         "profile_name": prof_name,
         "driver_name": driver.get('Name') or prof_name,
         "source_path": str(source_path),
         "is_live_documents": is_live,
+        "online_status": {
+            "is_online": active_online,
+            "mode_label": "ONLINE" if active_online else "OFFLINE",
+            "login_name": active_login,
+            "email": active_email,
+            "has_credentials": active_has_creds
+        },
         "money": driver.get('Money', 0),
         "casino_points": driver.get('NbCoupon', 0),
         "overall_level": calculate_player_level(data_obj),
@@ -514,6 +648,7 @@ def extract_save_summary(data_obj, prof_name, source_path):
             "materials_unlocked": mats_unlocked_cnt,
             "materials_total": 61,
             "casino_vip_unlocked": casino_furn_unlocked,
+            "casino_furniture_unlocked": casino_furn_unlocked,
             "is_max_unlocked": (furn_unlocked_cnt >= 383 and mats_unlocked_cnt >= 61 and casino_furn_unlocked)
         },
         "backups": {
@@ -611,9 +746,13 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
         if path == '/api/profiles':
             try:
                 profiles = find_all_tdu2_profiles()
+                def_root = core.find_default_savegame_dir() or (Path.home() / 'Documents' / 'Eden Games' / 'Test Drive Unlimited 2' / 'savegame')
                 self.send_json({
                     "success": True,
+                    "version": TOOLKIT_VERSION,
                     "profiles": profiles,
+                    "custom_dir": str(CUSTOM_SAVEGAME_DIR.resolve()) if CUSTOM_SAVEGAME_DIR else None,
+                    "default_dir": str(def_root) if def_root else None,
                     "decrypt_dir": str(DECRYPT_DIR.resolve()),
                     "active_profile": loaded_save_state["profile_name"],
                     "active_path": loaded_save_state["source_path"],
@@ -739,6 +878,121 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_error_json(f"Failed to load save: {e}")
             return
 
+        # --- CUSTOM SAVE DIRECTORY CONFIGURATION ---
+        elif path in ('/api/save-directory', '/api/directory'):
+            global CUSTOM_SAVEGAME_DIR
+            reset = payload.get('reset', False)
+            if reset:
+                CUSTOM_SAVEGAME_DIR = None
+                profiles = find_all_tdu2_profiles()
+                self.send_json({
+                    "success": True,
+                    "reset": True,
+                    "custom_dir": None,
+                    "profiles": profiles,
+                    "message": "Reset to default Documents savegame directory."
+                })
+                return
+
+            dir_input = payload.get('directory') or payload.get('path')
+            if not dir_input:
+                self.send_error_json("Parameter 'directory' or 'path' is required.")
+                return
+
+            p = Path(dir_input).resolve()
+            if not p.exists():
+                self.send_error_json(f"Path does not exist: {p}")
+                return
+
+            CUSTOM_SAVEGAME_DIR = p
+            profiles = find_all_tdu2_profiles()
+            self.send_json({
+                "success": True,
+                "custom_dir": str(p),
+                "profiles": profiles,
+                "message": f"Applied custom path: {p} ({len(profiles)} profile(s) found)"
+            })
+            return
+
+        # --- PROFILE ONLINE / OFFLINE MODE SWITCHER ---
+        elif path in ('/api/switch-mode', '/api/switch'):
+            prof_name = payload.get('profile') or payload.get('profile_name')
+            target_online = payload.get('target_online')
+            login_name = payload.get('login_name') or payload.get('login')
+            email = payload.get('email')
+            password = payload.get('password')
+            clone_from = payload.get('clone_from')
+
+            if not prof_name:
+                self.send_error_json("Parameter 'profile' (or 'profile_name') is required.")
+                return
+
+            custom_root = CUSTOM_SAVEGAME_DIR or core.find_default_savegame_dir()
+            try:
+                res = core.switch_profile_mode(
+                    profile_name=prof_name,
+                    savegame_root=custom_root,
+                    target_online=target_online,
+                    login_name=login_name,
+                    email=email,
+                    password=password,
+                    clone_from=clone_from
+                )
+                summary = None
+                if loaded_save_state["profile_name"] and loaded_save_state["profile_name"].lower() == prof_name.lower():
+                    summary = extract_save_summary(
+                        loaded_save_state["data_dict"],
+                        loaded_save_state["profile_name"],
+                        Path(loaded_save_state["source_path"])
+                    )
+                res["target_online"] = (res.get("new_mode") == "ONLINE")
+                res["summary"] = summary
+                res["profiles"] = find_all_tdu2_profiles()
+                self.send_json(res)
+            except Exception as e:
+                self.send_error_json(f"Failed to switch profile mode: {e}")
+            return
+
+        # --- CLONE PROGRESSION INTO ONLINE PROFILE ---
+        elif path == '/api/clone-progression':
+            source = payload.get('source') or payload.get('source_profile')
+            target = payload.get('target') or payload.get('target_profile')
+            copy_keymap = payload.get('copy_keymap', True)
+
+            if not source or not target:
+                self.send_error_json("Parameters 'source' (or 'source_profile') and 'target' (or 'target_profile') are required.")
+                return
+
+            custom_root = CUSTOM_SAVEGAME_DIR or core.find_default_savegame_dir()
+            try:
+                res = core.clone_progression(
+                    src_profile=source,
+                    dst_profile=target,
+                    savegame_root=custom_root,
+                    copy_keymap=copy_keymap,
+                    backup=True
+                )
+                summary = None
+                if loaded_save_state["profile_name"]:
+                    active_lower = loaded_save_state["profile_name"].lower()
+                    if active_lower == target.lower():
+                        summary = load_save_file(loaded_save_state["source_path"], target)
+                    elif active_lower == source.lower():
+                        summary = extract_save_summary(
+                            loaded_save_state["data_dict"],
+                            loaded_save_state["profile_name"],
+                            Path(loaded_save_state["source_path"])
+                        )
+                res["summary"] = summary
+                res["target_summary"] = summary or {"profile_name": target}
+                res["profiles"] = find_all_tdu2_profiles()
+                self.send_json(res)
+            except Exception as e:
+                self.send_error_json(f"Failed to clone progression: {e}")
+            return
+
+
+
         # --- DIRECT PROFILE EDITING (TAB 1) ---
         elif path == '/api/edit-profile':
             if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
@@ -790,8 +1044,8 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_error_json(f"Failed to edit profile: {e}")
             return
 
-        # --- UNLOCK ALL FURNITURE & MATERIALS (TAB 1) ---
-        elif path == '/api/unlock-furniture':
+        # --- UNLOCK CASINO FURNITURE (TAB 1) ---
+        elif path in ('/api/unlock-casino-furniture', '/api/unlock-furniture'):
             if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
@@ -1234,15 +1488,26 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             self.send_error(404, f"API endpoint '{path}' not found.")
 
 
-def run_server(port=PORT, auto_open=True):
+def run_server(port=PORT, auto_open=True, custom_dir=None):
+    global CUSTOM_SAVEGAME_DIR
+    if custom_dir:
+        CUSTOM_SAVEGAME_DIR = Path(custom_dir).resolve()
+    elif os.environ.get('TDU2_SAVEGAME_PATH'):
+        p_env = Path(os.environ['TDU2_SAVEGAME_PATH']).resolve()
+        if p_env.exists():
+            CUSTOM_SAVEGAME_DIR = p_env
+
     server_address = ('127.0.0.1', port)
     httpd = HTTPServer(server_address, TDU2WebHandler)
     url = f"http://127.0.0.1:{port}"
+    def_dir = core.find_default_savegame_dir()
     print("=" * 68)
-    print(f"  TDU2 SAVE FILE TOOLKIT - HTTP SERVER READY")
-    print(f"  URL: {url}")
-    print(f"  Workspaces: Documents (Live Game) & Local Folders")
-    print(f"  Backups:    {BACKUPS_DIR}")
+    print(f"  TDU2 SAVE FILE TOOLKIT v{TOOLKIT_VERSION} - HTTP SERVER READY")
+    print(f"  URL:          {url}")
+    print(f"  Default Path: {def_dir or 'Documents'}")
+    if CUSTOM_SAVEGAME_DIR:
+        print(f"  Custom Path:  {CUSTOM_SAVEGAME_DIR}")
+    print(f"  Backups:      {BACKUPS_DIR}")
     print("=" * 68)
 
     if auto_open:
@@ -1258,7 +1523,15 @@ def run_server(port=PORT, auto_open=True):
 if __name__ == '__main__':
     auto_open = '--no-browser' not in sys.argv
     p = PORT
+    c_dir = None
     for i, a in enumerate(sys.argv):
         if a == '--port' and i + 1 < len(sys.argv):
             p = int(sys.argv[i+1])
-    run_server(port=p, auto_open=auto_open)
+        elif a in ('--dir', '--save-dir') and i + 1 < len(sys.argv):
+            c_dir = sys.argv[i+1]
+        elif a in ('-v', '--version'):
+            print(f"TDU2 Save File Toolkit WebGUI v{TOOLKIT_VERSION}")
+            sys.exit(0)
+
+    run_server(port=p, auto_open=auto_open, custom_dir=c_dir)
+
