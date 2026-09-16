@@ -30,7 +30,7 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
   - **Online Account Credentials Management**: Configure multiplayer credentials when switching to online mode—either clone credentials from an existing registered profile or enter custom login credentials.
   - **Progression Transfer into Server-Registered Profiles**: Fixes multiplayer "Invalid Nickname" server rejections. Injects full offline progress (cash, houses, tuned cars, discovered roads) directly into an existing server-registered online profile while 100% preserving the target's online nickname, 8-byte Profile UUID, DLC tokens (`Extends`), credentials, and hardware control bindings (`KEYMAP`).
  
-  - **Security Hardening & Atomic Writes**:
+- **Security Hardening & Atomic Writes**:
   - **CSRF Protection & Origin Hardening**: Removed wildcard CORS `*`. Requests are restricted to local loopback origins (`127.0.0.1` / `localhost`) and secured via an ephemeral per-session `X-Toolkit-Token`, preventing external websites from tampering with local save files.
   - **Path Traversal & Overwrite Protections**: Strict `pathlib.Path.relative_to` boundary checks block static file prefix bypasses and restrict `/api/restore-backup` strictly within the `Backups/` repository. File loading is constrained to authorized save roots.
   - **Atomic File Writing**: All save updates (`DATA`, `OPTIONS`, `ProfileList.dat`) write to `<file>.tmp_<pid>` with `os.fsync()` before atomic `os.replace()`, preventing corrupt partial writes on system crash or sudden power loss. Multi-file operations feature automated rollback.
