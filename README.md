@@ -3,6 +3,7 @@
 A zero-dependency local web interface and editing engine for *Test Drive Unlimited 2* save files on Windows PC.
 
 WARNING: TOOLKIT EDITS ACTUAL SAVE FILES IN DOCUMENTS OR USER-SPECIFIED FOLDERS. CREATE BACKUPS BEFORE ANY OPERATION.
+WARNING: THIS TOOLKIT IS INTENDED FOR USE ON TDU2 WITH TDUWORLD MOD INSTALLED. CLEAN VERSION OF THE GAME WASN'T TESTED.
 ---
 
 ## Overview
@@ -10,14 +11,14 @@ WARNING: TOOLKIT EDITS ACTUAL SAVE FILES IN DOCUMENTS OR USER-SPECIFIED FOLDERS.
 This toolkit provides an offline, browser-based interface for inspecting, editing, tuning, repairing, and managing online/offline status for TDU2 PC save files. The software runs entirely on the Python standard library with no external third-party dependencies or installations required.
 
 ### Core Capabilities
-- **Save Path Detection & Active Path Isolation (v2.0.2)**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables.
+- **Save Path Detection & Active Path Isolation (v2.0.2)**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables. Additionally, if profiles do not appear in the dropdown menu, you can specify a custom path.
 - **Tab 1: Player Profile Editor**:
   - **Player Finances & Level**: Edit Driver Money (up to $2,147,483,648), Casino Points (up to 2,147,483,648 Cp), and Overall Player Level (1 to 73).
   - **Profile Mode Status**: Live status indicator and quick toggle between Single-Player Offline and Multiplayer Online modes.
-  - **Casino Furniture Unlocker (v2.0.2)**: One-click unlock for the exclusive Casino furniture suite for residences and penthouses.
+  - **Casino Furniture Unlocker**: One-click unlock for the exclusive Casino furniture suite for residences.
 - **Tab 2: Garage Editor**:
   - **Garage Showroom**: Browse all owned properties and parked vehicles across Ibiza and Hawaii with slot occupancy metrics.
-  - **Vehicle Model Swapping**: Safely swap any owned vehicle with any model from the complete 359-vehicle catalog.
+  - **Vehicle Swapping**: Safely swap any owned vehicle with any model from the complete 359-vehicle catalog.
   - **Performance Tuning**: Adjust individual tuning stages (Acceleration, Top Speed, Braking from Level 0 to 4) or apply one-click maximum tuning per car.
 - **Tab 3: Save Files Manipulation**:
   - **Decrypted Save File Manipulation**: Unpack encrypted `DATA`, `KEYMAP`, and `OPTIONS` containers into formatted JSON and raw binary templates in a dedicated `decrypt/` folder, with one-click re-encryption and packaging back to game-ready saves.
@@ -34,8 +35,7 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 ### Prerequisites
 - Windows 7, 8, 10, or 11
 - Python 3.8 or newer installed and available in your system `PATH` *(Note for Windows 7 & 8: install Python 3.8.10 with SP1/KB2999226, as Python 3.9+ dropped Win7/8 support)*
-- A modern web browser (Google Chrome, Mozilla Firefox, Microsoft Edge, Opera, or Supermium)
-- No additional libraries or `pip` packages are required
+- A modern web browser (Google Chrome, Mozilla Firefox, Microsoft Edge, Opera, or equivalent)
 
 ### Quick Start
 1. Run `Run_WebGUI.bat` (or `Run_WebGUI_Silent.vbs` to run in the background without a persistent console window).
