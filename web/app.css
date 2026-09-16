@@ -1714,3 +1714,40 @@ body {
   font-family: var(--font-mono);
   word-break: break-all;
 }
+
+/* Disabled & Readonly Input States */
+.input-readonly,
+.custom-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-muted) !important;
+}
+
+/* Progression Cloner Safeguard Note */
+.prog-safeguard-note {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1rem;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: var(--radius-md);
+  color: var(--accent-cyan);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.prog-safeguard-note svg {
+  flex-shrink: 0;
+  stroke: var(--accent-cyan);
+}
+
+.prog-safeguard-note code {
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+}

@@ -16,7 +16,7 @@ import shutil
 import argparse
 from pathlib import Path
 
-__version__ = "2.0.2"
+__version__ = "2.0.5"
 
 # ==============================================================================
 # 1. EMBEDDED CRYPTOGRAPHIC CONSTANTS & TABLES
@@ -600,6 +600,27 @@ def find_matching_profile(file_bytes, filename_hint, candidate_names):
             pass
     return None
 
+def atomic_write(file_path: Path, data: bytes):
+    """
+    Atomically writes binary data to file_path using a temporary file and atomic replace.
+    Guarantees no partial writes or corrupted files on power loss, crashes, or AV locking.
+    """
+    file_path = Path(file_path).resolve()
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = file_path.with_name(f"{file_path.name}.tmp_{os.getpid()}_{os.urandom(4).hex()}")
+    try:
+        with open(tmp_path, 'wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, file_path)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
 def detect_profile_name(file_path, file_bytes=None):
     """
     Intelligently auto-detects the user profile name from folder hierarchy,
@@ -675,8 +696,7 @@ def cmd_unpack(args):
         # Backup original save if not already backed up
         bak_file = sf.with_suffix('.bak')
         if not bak_file.exists():
-            with open(bak_file, 'wb') as f:
-                f.write(data)
+            atomic_write(bak_file, data)
             print(f"    Created backup: {bak_file.name}")
 
         try:
@@ -686,8 +706,7 @@ def cmd_unpack(args):
             # Save raw decrypted XMBF if requested
             if args.raw:
                 dec_path = dest_dir / f"{sf.name}.dec"
-                with open(dec_path, 'wb') as f:
-                    f.write(xmbf_data)
+                atomic_write(dec_path, xmbf_data)
                 print(f"    Saved raw binary XMBF: {dec_path.name}")
 
             # Parse XMBF to JSON
@@ -813,8 +832,7 @@ def cmd_pack(args):
 
         # Encrypt and write
         enc_data = encrypt_save_file(new_xmbf, prof_name, save_stem, original_footer)
-        with open(out_save, 'wb') as f:
-            f.write(enc_data)
+        atomic_write(out_save, enc_data)
         print(f"    Successfully generated encrypted save: {out_save.name} ({len(enc_data):,} bytes)")
 
 def cmd_decrypt(args):
@@ -827,8 +845,7 @@ def cmd_decrypt(args):
 
     print(f"[*] Decrypting {in_path.name} (Profile: {prof_name})...")
     xmbf, _, _ = decrypt_save_file(data, prof_name, in_path.name)
-    with open(out_path, 'wb') as f:
-        f.write(xmbf)
+    atomic_write(out_path, xmbf)
     print(f"    Wrote: {out_path.name} ({len(xmbf):,} bytes)")
 
 def cmd_encrypt(args):
@@ -842,8 +859,7 @@ def cmd_encrypt(args):
     with open(in_path, 'rb') as f:
         xmbf = f.read()
     enc = encrypt_save_file(xmbf, prof_name, save_name)
-    with open(out_path, 'wb') as f:
-        f.write(enc)
+    atomic_write(out_path, enc)
     print(f"    Wrote: {out_path.name} ({len(enc):,} bytes)")
 
 def cmd_verify(args):
@@ -1211,8 +1227,7 @@ def cmd_edit(args):
         # Backup
         bak_file = data_file.with_suffix('.bak')
         if not bak_file.exists():
-            with open(bak_file, 'wb') as f:
-                f.write(raw_data)
+            atomic_write(bak_file, raw_data)
             print(f"    Created backup: {bak_file.name}")
 
     xmbf_bytes, footer, fn = decrypt_save_file(raw_data, prof_name, 'DATA')
@@ -1430,8 +1445,7 @@ def cmd_edit(args):
     new_xmbf = encode_dict_to_xmbf(xmbf_bytes, {root_name: data_obj}, root_name)
     enc_save = encrypt_save_file(new_xmbf, prof_name, 'DATA', footer)
 
-    with open(out_file, 'wb') as f:
-        f.write(enc_save)
+    atomic_write(out_file, enc_save)
     print(f"[*] Successfully saved modified savegame: {out_file}")
 
 
@@ -1497,8 +1511,7 @@ def patch_profile_list_flag(profile_list_path: Path, profile_name: str, make_onl
 
     if backup:
         bak_file = profile_list_path.with_suffix('.bak')
-        with open(bak_file, 'wb') as bf:
-            bf.write(data)
+        atomic_write(bak_file, bytes(data))
 
     num_records = (len(data) - 10) // 257
     matched = False
@@ -1517,8 +1530,7 @@ def patch_profile_list_flag(profile_list_path: Path, profile_name: str, make_onl
         new_rec[256] = 0xFF if make_online else 0x00
         data.extend(new_rec)
 
-    with open(profile_list_path, 'wb') as f:
-        f.write(data)
+    atomic_write(profile_list_path, bytes(data))
 
     return True
 
@@ -1534,8 +1546,7 @@ def patch_options_online(options_path: Path, profile_name: str, make_online: boo
 
     if backup:
         bak_file = options_path.with_suffix('.bak')
-        with open(bak_file, 'wb') as bf:
-            bf.write(raw_bytes)
+        atomic_write(bak_file, raw_bytes)
 
     xmbf, footer, _ = decrypt_save_file(raw_bytes, profile_name, 'OPTIONS')
     root_name, opt_obj = decode_xmbf_to_dict(xmbf)
@@ -1549,8 +1560,7 @@ def patch_options_online(options_path: Path, profile_name: str, make_online: boo
     new_xmbf = encode_dict_to_xmbf(xmbf, {root_name: opt_obj}, root_name)
     enc_data = encrypt_save_file(new_xmbf, profile_name, 'OPTIONS', original_footer=footer)
 
-    with open(options_path, 'wb') as f:
-        f.write(enc_data)
+    atomic_write(options_path, enc_data)
 
     return True
 
@@ -1566,8 +1576,7 @@ def convert_data_file(src_data_path: Path, dst_data_path: Path, src_profile_name
 
     if backup and dst_data_path.is_file():
         bak_file = dst_data_path.with_suffix('.bak')
-        with open(bak_file, 'wb') as bf:
-            bf.write(dst_data_path.read_bytes())
+        atomic_write(bak_file, dst_data_path.read_bytes())
 
     xmbf, src_footer, _ = decrypt_save_file(raw_bytes, src_profile_name, 'DATA')
     root_name, data_obj = decode_xmbf_to_dict(xmbf)
@@ -1585,8 +1594,7 @@ def convert_data_file(src_data_path: Path, dst_data_path: Path, src_profile_name
     enc_data = encrypt_save_file(new_xmbf, dst_profile_name, 'DATA', original_footer=footer)
     dst_data_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(dst_data_path, 'wb') as f:
-        f.write(enc_data)
+    atomic_write(dst_data_path, enc_data)
 
     return True
 
@@ -1629,17 +1637,24 @@ def get_profile_credentials(profile_identifier, savegame_root: Path = None):
         if c and c.upper() not in ['OPTIONS', 'PLAYERSAVE'] and c not in candidates:
             candidates.append(c)
 
-    for ancestor in [opt_file.parent, opt_file.parent.parent, opt_file.parent.parent.parent]:
-        if ancestor and ancestor.is_dir():
-            pl_cand = ancestor / 'ProfileList.dat'
-            if pl_cand.is_file():
-                try:
-                    _, recs = read_profile_list(pl_cand)
-                    for r in recs:
-                        if r.get('name') and r['name'] not in candidates:
-                            candidates.append(r['name'])
-                except Exception:
-                    pass
+    search_dirs = []
+    if savegame_root and Path(savegame_root).is_dir():
+        search_dirs.append(Path(savegame_root))
+    else:
+        for ancestor in [opt_file.parent, opt_file.parent.parent]:
+            if ancestor and ancestor.is_dir() and ancestor not in search_dirs:
+                search_dirs.append(ancestor)
+
+    for ancestor in search_dirs:
+        pl_cand = ancestor / 'ProfileList.dat'
+        if pl_cand.is_file():
+            try:
+                _, recs = read_profile_list(pl_cand)
+                for r in recs:
+                    if r.get('name') and r['name'] not in candidates:
+                        candidates.append(r['name'])
+            except Exception:
+                pass
 
     xmbf = None
     last_err = None
@@ -1673,7 +1688,7 @@ def switch_profile_mode(
 ):
     """
     Toggles or sets a profile between Online and Offline.
-    Updates both ProfileList.dat and OPTIONS container cleanly with backups.
+    Updates both ProfileList.dat and OPTIONS container cleanly with backups and transaction rollback.
     """
     root = savegame_root or find_default_savegame_dir()
     if not root or not root.is_dir():
@@ -1713,19 +1728,30 @@ def switch_profile_mode(
             email = email or ""
             password = password or ""
 
-    if profile_list_path.is_file():
-        patch_profile_list_flag(profile_list_path, profile_name, new_mode, backup=True)
+    pl_backed_up = False
+    pl_bak_file = profile_list_path.with_suffix('.bak')
+    try:
+        if profile_list_path.is_file():
+            patch_profile_list_flag(profile_list_path, profile_name, new_mode, backup=True)
+            pl_backed_up = True
 
-    if options_path.is_file():
-        patch_options_online(
-            options_path=options_path,
-            profile_name=profile_name,
-            make_online=new_mode,
-            login_name=login_name,
-            email=email,
-            password=password,
-            backup=True
-        )
+        if options_path.is_file():
+            patch_options_online(
+                options_path=options_path,
+                profile_name=profile_name,
+                make_online=new_mode,
+                login_name=login_name,
+                email=email,
+                password=password,
+                backup=True
+            )
+    except Exception as e:
+        if pl_backed_up and pl_bak_file.is_file():
+            try:
+                shutil.copy2(pl_bak_file, profile_list_path)
+            except Exception:
+                pass
+        raise e
 
     cred_info = ""
     if new_mode and clone_from:
@@ -1746,7 +1772,7 @@ def clone_progression(
     src_profile: str,
     dst_profile: str,
     savegame_root: Path = None,
-    copy_keymap: bool = True,
+    copy_keymap: bool = False,
     backup: bool = True
 ):
     """
@@ -1799,11 +1825,9 @@ def clone_progression(
 
     if backup:
         bak_file = dst_data_file.with_suffix('.bak')
-        with open(bak_file, 'wb') as bf:
-            bf.write(dst_bytes)
+        atomic_write(bak_file, dst_bytes)
 
-    with open(dst_data_file, 'wb') as df:
-        df.write(enc_data)
+    atomic_write(dst_data_file, enc_data)
 
     keymap_copied = False
     src_km = src_ps / 'KEYMAP'
@@ -1823,10 +1847,8 @@ def clone_progression(
             enc_km = encrypt_save_file(new_km_x, dst_profile, 'KEYMAP', original_footer=dst_km_foot)
 
             if backup:
-                with open(dst_km.with_suffix('.bak'), 'wb') as bkf:
-                    bkf.write(dst_km_b)
-            with open(dst_km, 'wb') as dkf:
-                dkf.write(enc_km)
+                atomic_write(dst_km.with_suffix('.bak'), dst_km_b)
+            atomic_write(dst_km, enc_km)
             keymap_copied = True
         except Exception:
             pass
@@ -1922,7 +1944,7 @@ def cmd_clone_progression(args):
         src_profile=args.source,
         dst_profile=args.target,
         savegame_root=root,
-        copy_keymap=not getattr(args, 'no_keymap', False),
+        copy_keymap=getattr(args, 'copy_keymap', False),
         backup=not getattr(args, 'no_backup', False)
     )
     print(f"[*] {res['message']}")
@@ -1999,7 +2021,7 @@ def main():
     p_clonp.add_argument('source', type=str, help="Source profile (copy progression from).")
     p_clonp.add_argument('target', type=str, help="Target online profile (inject progression into).")
     p_clonp.add_argument('--dir', type=str, default=None, help="Path to TDU2 savegame folder.")
-    p_clonp.add_argument('--no-keymap', action='store_true', help="Do not copy control keymap.")
+    p_clonp.add_argument('--copy-keymap', action='store_true', help="Also copy control keymap (default: False to protect custom controls).")
     p_clonp.add_argument('--no-backup', action='store_true', help="Do not make automatic backups.")
 
     args = parser.parse_args()

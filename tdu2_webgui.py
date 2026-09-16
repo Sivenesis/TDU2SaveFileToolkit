@@ -18,12 +18,16 @@ import threading
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+import secrets
 
 # Import the core TDU2 save engine from local directory
 import tdu2_save_tool as core
 
-TOOLKIT_VERSION = "2.0.2"
+TOOLKIT_VERSION = "2.0.5"
 PORT = 8282
+SESSION_TOKEN = secrets.token_hex(16)
+MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB payload limit
+
 WORKSPACE_DIR = Path(__file__).parent.resolve()
 WEB_DIR = WORKSPACE_DIR / 'web'
 BACKUPS_DIR = WORKSPACE_DIR / 'Backups'
@@ -717,14 +721,21 @@ def load_save_file(target_path_str, profile_name_override=None):
 
 class TDU2WebHandler(BaseHTTPRequestHandler):
 
+    def _apply_cors_headers(self):
+        origin = self.headers.get('Origin')
+        if origin:
+            parsed_origin = urlparse(origin)
+            if parsed_origin.hostname in ('127.0.0.1', 'localhost'):
+                self.send_header('Access-Control-Allow-Origin', origin)
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Toolkit-Token')
+
     def send_json(self, data, status_code=200):
         body = json.dumps(data, indent=2).encode('utf-8')
         self.send_response(status_code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self._apply_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -733,9 +744,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self._apply_cors_headers()
         self.end_headers()
 
     def do_GET(self):
@@ -826,7 +835,9 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             target_file = (WEB_DIR / rel_path).resolve()
 
         # Prevent directory traversal
-        if not str(target_file).startswith(str(WEB_DIR)):
+        try:
+            target_file.relative_to(WEB_DIR.resolve())
+        except ValueError:
             self.send_error(403, "Forbidden")
             return
 
@@ -836,6 +847,8 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             try:
                 with open(target_file, 'rb') as f:
                     content = f.read()
+                if target_file.name == 'index.html':
+                    content = content.replace(b'__SESSION_TOKEN__', SESSION_TOKEN.encode('utf-8'))
                 self.send_response(200)
                 self.send_header('Content-Type', f"{mime}; charset=utf-8" if 'text' in mime or 'javascript' in mime else mime)
                 self.send_header('Content-Length', str(len(content)))
@@ -847,10 +860,21 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             self.send_error(404, "File Not Found")
 
     def do_POST(self):
+        global CUSTOM_SAVEGAME_DIR
         parsed = urlparse(self.path)
         path = parsed.path
 
         content_len = int(self.headers.get('Content-Length', 0))
+        if content_len > MAX_CONTENT_LENGTH:
+            self.send_error_json("Payload too large (max 10MB).", status_code=413)
+            return
+
+        # Security check: require matching X-Toolkit-Token for all mutating POST requests
+        token = self.headers.get('X-Toolkit-Token')
+        if token != SESSION_TOKEN:
+            self.send_error_json("Unauthorized: Missing or invalid X-Toolkit-Token.", status_code=403)
+            return
+
         post_body = self.rfile.read(content_len) if content_len > 0 else b'{}'
 
         try:
@@ -867,8 +891,35 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_error_json("Parameter 'path' is required.")
                 return
 
+            p = Path(target_path).resolve()
+
+            # Path containment check: ensure target path is within allowed directories
+            allowed_roots = [
+                WORKSPACE_DIR.resolve(),
+                BACKUPS_DIR.resolve(),
+                DECRYPT_DIR.resolve(),
+            ]
+            if CUSTOM_SAVEGAME_DIR:
+                allowed_roots.append(CUSTOM_SAVEGAME_DIR.resolve())
+            def_root = core.find_default_savegame_dir()
+            if def_root:
+                allowed_roots.append(def_root.resolve())
+
+            is_allowed = False
+            for r in allowed_roots:
+                try:
+                    p.relative_to(r)
+                    is_allowed = True
+                    break
+                except ValueError:
+                    pass
+
+            if not is_allowed:
+                self.send_error_json("Access denied: Target path is outside permitted save directories.", status_code=400)
+                return
+
             try:
-                summary = load_save_file(target_path, profile_override)
+                summary = load_save_file(str(p), profile_override)
                 self.send_json({
                     "success": True,
                     "message": f"Successfully loaded profile: {summary['driver_name']}",
@@ -880,7 +931,6 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
 
         # --- CUSTOM SAVE DIRECTORY CONFIGURATION ---
         elif path in ('/api/save-directory', '/api/directory'):
-            global CUSTOM_SAVEGAME_DIR
             reset = payload.get('reset', False)
             if reset:
                 CUSTOM_SAVEGAME_DIR = None
@@ -900,8 +950,19 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 return
 
             p = Path(dir_input).resolve()
-            if not p.exists():
-                self.send_error_json(f"Path does not exist: {p}")
+            if not p.is_dir():
+                self.send_error_json(f"Path does not exist or is not a directory: {p}")
+                return
+
+            # Validate that the directory contains recognizable TDU2 structures
+            has_tdu2_structure = (
+                (p / 'ProfileList.dat').is_file() or
+                (p / 'DATA').is_file() or
+                (p / 'PLAYERSAVE').is_dir() or
+                any((sub / 'PLAYERSAVE').is_dir() or (sub / 'DATA').is_file() for sub in p.iterdir() if sub.is_dir())
+            )
+            if not has_tdu2_structure:
+                self.send_error_json(f"Selected folder does not appear to be a valid TDU2 savegame folder or profile directory: {p}")
                 return
 
             CUSTOM_SAVEGAME_DIR = p
@@ -957,7 +1018,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
         elif path == '/api/clone-progression':
             source = payload.get('source') or payload.get('source_profile')
             target = payload.get('target') or payload.get('target_profile')
-            copy_keymap = payload.get('copy_keymap', True)
+            copy_keymap = payload.get('copy_keymap', False)
 
             if not source or not target:
                 self.send_error_json("Parameters 'source' (or 'source_profile') and 'target' (or 'target_profile') are required.")
@@ -1011,25 +1072,18 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 # 1. Automatic safety backup
                 bak_path = create_operation_backup(save_path, prof_name, "ProfileEdit")
 
-                # 2. Straight numeric updates
+                # 2. Straight numeric updates (level editing temporarily disabled - WIP)
                 data_obj, msg = core.edit_player_profile(
                     data_obj,
                     money=payload.get('money'),
-                    casino_points=payload.get('casino_points'),
-                    level=payload.get('level'),
-                    racing_level=payload.get('racing_level'),
-                    collection_level=payload.get('collection_level'),
-                    social_level=payload.get('social_level'),
-                    cruising_points=payload.get('cruising_points'),
-                    cruising_areas=payload.get('cruising_areas')
+                    casino_points=payload.get('casino_points')
                 )
 
                 # 3. Encrypt and save
                 new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
                 enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
 
-                with open(save_path, 'wb') as f:
-                    f.write(enc_save)
+                core.atomic_write(save_path, enc_save)
 
                 loaded_save_state["raw_xmbf"] = new_xmbf
                 summary = extract_save_summary(data_obj, prof_name, save_path)
@@ -1066,8 +1120,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
                 enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
 
-                with open(save_path, 'wb') as f:
-                    f.write(enc_save)
+                core.atomic_write(save_path, enc_save)
 
                 loaded_save_state["raw_xmbf"] = new_xmbf
                 summary = extract_save_summary(data_obj, prof_name, save_path)
@@ -1112,8 +1165,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
                 enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
 
-                with open(save_path, 'wb') as f:
-                    f.write(enc_save)
+                core.atomic_write(save_path, enc_save)
 
                 loaded_save_state["raw_xmbf"] = new_xmbf
                 summary = extract_save_summary(data_obj, prof_name, save_path)
@@ -1173,8 +1225,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
                 enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
 
-                with open(save_path, 'wb') as f:
-                    f.write(enc_save)
+                core.atomic_write(save_path, enc_save)
 
                 loaded_save_state["raw_xmbf"] = new_xmbf
                 summary = extract_save_summary(data_obj, prof_name, save_path)
@@ -1219,8 +1270,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
                 enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
 
-                with open(save_path, 'wb') as f:
-                    f.write(enc_save)
+                core.atomic_write(save_path, enc_save)
 
                 loaded_save_state["raw_xmbf"] = new_xmbf
                 summary = extract_save_summary(data_obj, prof_name, save_path)
@@ -1268,14 +1318,21 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             backup_target = payload.get('backup_path')
 
             if backup_target:
-                bak_path = Path(backup_target)
-                if not bak_path.is_file():
-                    # Check inside Backups/<Profile>
-                    cand = BACKUPS_DIR / prof_name / backup_target
-                    if cand.is_file():
-                        bak_path = cand
+                cand_p = Path(backup_target)
+                if not cand_p.is_absolute():
+                    cand_p = (BACKUPS_DIR / prof_name / backup_target).resolve()
+                else:
+                    cand_p = cand_p.resolve()
+
+                # Strictly verify containment within BACKUPS_DIR
+                try:
+                    cand_p.relative_to(BACKUPS_DIR.resolve())
+                    bak_path = cand_p
+                except ValueError:
+                    self.send_error_json("Access denied: Backup path must reside within the Backups directory.", status_code=400)
+                    return
             else:
-                # Default to nearest .bak
+                # Default to nearest .bak in save directory
                 bak_path = save_path.with_suffix('.bak')
 
             if not bak_path.is_file():
@@ -1286,7 +1343,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 # Safety backup of current state before restore
                 create_operation_backup(save_path, prof_name, "PreRestore")
 
-                shutil.copy2(bak_path, save_path)
+                core.atomic_write(save_path, bak_path.read_bytes())
                 summary = load_save_file(str(save_path), prof_name)
 
                 self.send_json({
@@ -1318,8 +1375,8 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                     "files": {}
                 }
 
-                # Unpack DATA, KEYMAP, and OPTIONS
-                target_names = ['DATA', 'KEYMAP', 'OPTIONS']
+                # Unpack DATA container only (KEYMAP and OPTIONS are strictly protected from tampering)
+                target_names = ['DATA']
                 for tname in target_names:
                     candidate = None
                     for fn in [tname, tname.lower(), tname.capitalize()]:
@@ -1366,7 +1423,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                     "@echo off\r\n"
                     "cd /d \"%~dp0\"\r\n"
                     "echo ======================================================================\r\n"
-                    "echo Packing Decrypted TDU2 Save Files (DATA, KEYMAP, OPTIONS)\r\n"
+                    "echo Packing Decrypted TDU2 Save File (DATA)\r\n"
                     "echo ======================================================================\r\n"
                     "python ..\\tdu2_save_tool.py pack . -o game_ready\\\r\n"
                     "echo.\r\n"
@@ -1377,7 +1434,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
 
                 self.send_json({
                     "success": True,
-                    "message": f"Successfully unpacked {len(manifest['files'])} save files (DATA, KEYMAP, OPTIONS) into 'decrypt/' folder.",
+                    "message": f"Successfully unpacked DATA save file into 'decrypt/' folder.",
                     "decrypt_dir": str(DECRYPT_DIR.resolve()),
                     "unpacked_files": unpacked_files,
                     "unpacked_count": len(manifest["files"]),
@@ -1428,6 +1485,9 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
 
                 for jf in json_files:
                     stem = jf.stem.upper()
+                    # Safeguard: never pack or overwrite KEYMAP or OPTIONS
+                    if stem != 'DATA':
+                        continue
                     with open(jf, 'r', encoding='utf-8') as f:
                         json_data = json.load(f)
 
@@ -1450,14 +1510,15 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                     enc_save = core.encrypt_save_file(new_xmbf, prof_name, stem, original_footer)
 
                     # 1. Output to game_ready/ folder
-                    (game_ready_dir / stem).write_bytes(enc_save)
+                    core.atomic_write(game_ready_dir / stem, enc_save)
 
-                    # 2. Live save directory write with safety backup
-                    live_target = save_dir / stem
-                    if live_target.is_file():
-                        last_bak = create_operation_backup(live_target, prof_name, f"PrePack_{stem}")
-                    with open(live_target, 'wb') as f:
-                        f.write(enc_save)
+                    # 2. Live save directory write with safety backup (when confirmed)
+                    install_to_live = payload.get('install_to_live', False)
+                    if install_to_live:
+                        live_target = save_dir / stem
+                        if live_target.is_file():
+                            last_bak = create_operation_backup(live_target, prof_name, f"PrePack_{stem}")
+                        core.atomic_write(live_target, enc_save)
 
                     packed_files.append(stem)
 
@@ -1472,10 +1533,12 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 else:
                     summary = extract_save_summary(loaded_save_state["data_dict"], prof_name, save_path)
 
+                target_desc = "live save and 'decrypt/game_ready/'" if payload.get('install_to_live', False) else "'decrypt/game_ready/'"
                 self.send_json({
                     "success": True,
-                    "message": f"Successfully packed {len(packed_files)} file(s) ({', '.join(packed_files)}) from 'decrypt/' to live save and 'decrypt/game_ready/'.",
+                    "message": f"Successfully packed {len(packed_files)} file(s) ({', '.join(packed_files)}) from 'decrypt/' to {target_desc}.",
                     "packed_files": packed_files,
+                    "installed_to_live": bool(payload.get('install_to_live', False)),
                     "game_ready_dir": str(game_ready_dir.resolve()),
                     "backup_path": str(last_bak.resolve()) if last_bak else None,
                     "summary": summary

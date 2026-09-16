@@ -1,5 +1,5 @@
 /**
- * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 2.0.2
+ * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 2.0.5
  * Modern client logic for 4-tab architecture, custom path management, and online mode switcher.
  */
 
@@ -21,12 +21,20 @@ const state = {
 // DOM Elements Cache
 const el = {};
 
+function getAuthHeaders() {
+  const token = document.querySelector('meta[name="toolkit-token"]')?.getAttribute('content') || '';
+  return {
+    'Content-Type': 'application/json',
+    'X-Toolkit-Token': token
+  };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   cacheElements();
   setupTabs();
   setupEventListeners();
   setStandbyUI();
-  addLog("TDU2 Save File Toolkit v2.0.2 initialized. Scanning available save profiles...", "info");
+  addLog("TDU2 Save File Toolkit v2.0.5 initialized. Scanning available save profiles...", "info");
   fetchProfiles();
   fetchCatalog();
 });
@@ -417,7 +425,7 @@ async function applyCustomPath(pathValue) {
   try {
     const res = await fetch('/api/save-directory', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ directory: target })
     });
     const data = await res.json();
@@ -443,7 +451,7 @@ async function resetToDefaultDocuments() {
   try {
     const res = await fetch('/api/save-directory', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ reset: true })
     });
     const data = await res.json();
@@ -525,7 +533,7 @@ async function loadProfile(targetPath) {
   try {
     const res = await fetch('/api/load', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ path: targetPath })
     });
     const data = await res.json();
@@ -591,7 +599,7 @@ function updateUI(summary) {
   if (el.inputCasinoPoints) el.inputCasinoPoints.value = summary.casino_points;
   if (el.casinoFormattedHint) el.casinoFormattedHint.textContent = `${summary.casino_points.toLocaleString()} Cp`;
 
-  if (el.inputLevel) el.inputLevel.value = summary.overall_level;
+  if (el.inputLevel) el.inputLevel.value = `Level ${summary.overall_level}`;
 
   // Casino Furniture status
   const furn = summary.furniture || {};
@@ -625,8 +633,7 @@ async function saveProfileChanges() {
 
   const payload = {
     money: Math.min(2147483648, Math.max(0, Number(el.inputMoney.value) || 0)),
-    casino_points: Math.min(2147483648, Math.max(0, Number(el.inputCasinoPoints.value) || 0)),
-    level: Math.min(73, Math.max(1, Number(el.inputLevel.value) || 1))
+    casino_points: Math.min(2147483648, Math.max(0, Number(el.inputCasinoPoints.value) || 0))
   };
 
   addLog("Applying direct profile changes...", "info");
@@ -634,7 +641,7 @@ async function saveProfileChanges() {
   try {
     const res = await fetch('/api/edit-profile', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
     const data = await res.json();
@@ -661,7 +668,7 @@ async function executeUnlockCasinoFurniture() {
   try {
     const res = await fetch('/api/unlock-casino-furniture', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: getAuthHeaders()
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
@@ -933,7 +940,7 @@ async function executeTuning(slotIndex, tunePayload, carName) {
   try {
     const res = await fetch('/api/tune-car', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ slot: slotIndex, ...tunePayload })
     });
     const data = await res.json();
@@ -1053,7 +1060,7 @@ async function executeCatalogSwap(slotIndex, newArchetype, newCarName) {
   try {
     const res = await fetch('/api/swap-car-catalog', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ slot: slotIndex, new_archetype: newArchetype })
     });
     const data = await res.json();
@@ -1084,7 +1091,7 @@ async function executeUnpackSave() {
   try {
     const res = await fetch('/api/unpack', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: getAuthHeaders()
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
@@ -1118,7 +1125,8 @@ async function executePackSave() {
       try {
         const res = await fetch('/api/pack', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ install_to_live: true })
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error);
@@ -1154,7 +1162,7 @@ async function executeManualBackup() {
   try {
     const res = await fetch('/api/create-backup', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ label: "Manual" })
     });
     const data = await res.json();
@@ -1208,7 +1216,7 @@ async function executeRestoreBackup(backupPath) {
   try {
     const res = await fetch('/api/restore-backup', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ backup_path: backupPath })
     });
     const data = await res.json();
@@ -1405,7 +1413,7 @@ async function executeSwitchProfile(profileName, targetOnline) {
   try {
     const res = await fetch('/api/switch-mode', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(payload)
     });
     const data = await res.json();
@@ -1429,8 +1437,6 @@ async function executeSwitchProfile(profileName, targetOnline) {
 async function executeProgressionTransfer() {
   const sourceProfile = el.progSourceSelect?.value;
   const targetProfile = el.progTargetSelect?.value;
-  const copyKeymap = el.progCopyKeymap ? el.progCopyKeymap.checked : true;
-
   if (!sourceProfile) {
     showToast("Please select a Source Profile to copy progression from.", "error");
     return;
@@ -1448,18 +1454,18 @@ async function executeProgressionTransfer() {
     `Transfer Progression: ${sourceProfile} &rarr; ${targetProfile}?`,
     `This will clone all progression (money, owned houses, tuned vehicles, clothes, unlocked items) from <strong>${escapeHtml(sourceProfile)}</strong> into <strong>${escapeHtml(targetProfile)}</strong>.<br><br>
     • <strong>${escapeHtml(targetProfile)}'s server nickname, UUID, and DLC tokens will be 100% preserved.</strong><br>
-    • Custom wheel and keyboard bindings (KEYMAP) will ${copyKeymap ? 'be copied' : 'remain untouched'}.<br>
+    • Controls and steering wheel bindings (<code>KEYMAP</code>) remain safely untouched.<br>
     • Automatic safety backups of both profiles will be created in <strong>Backups/</strong> prior to transfer.`,
     async () => {
       addLog(`Initiating progression transfer from '${sourceProfile}' to '${targetProfile}'...`, "info");
       try {
         const res = await fetch('/api/clone-progression', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             source_profile: sourceProfile,
             target_profile: targetProfile,
-            copy_keymap: copyKeymap
+            copy_keymap: false
           })
         });
         const data = await res.json();

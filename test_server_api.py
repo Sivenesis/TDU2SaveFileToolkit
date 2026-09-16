@@ -23,6 +23,9 @@ import tdu2_save_tool as core
 
 PORT = 8284
 
+def auth_headers():
+    return {"Content-Type": "application/json", "X-Toolkit-Token": server_mod.SESSION_TOKEN}
+
 def run_tests():
     print("=" * 68)
     print("  RUNNING EXHAUSTIVE INTEGRATION TESTS (REVISION 2)")
@@ -84,7 +87,7 @@ def run_tests():
             raise FileNotFoundError("No test save source found (data.dec or PLAYERSAVE/DATA).")
 
     load_payload = json.dumps({"path": str(test_save), "profile": test_profile}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/load", data=load_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/load", data=load_payload, headers=auth_headers())
     load_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert load_res["success"] is True
     summary = load_res["summary"]
@@ -94,25 +97,23 @@ def run_tests():
     assert len(summary["garage"]["houses"]) >= 1
     print(f"[+] 3. Profile Loaded: OK (Profile: {summary['profile_name']}, Level {summary['overall_level']}, ${summary['money']:,}, {summary['garage']['count']} cars in {len(summary['garage']['houses'])} houses)")
 
-    # 4. Test Direct Profile Editing (Tab 1) - Test up to 2,147,483,648
+    # 4. Test Direct Profile Editing (Tab 1) - Test up to 2,147,483,648 (Level edit removed - WIP)
     edit_payload = json.dumps({
         "money": 2147483648,
-        "casino_points": 2147483648,
-        "level": 73
+        "casino_points": 2147483648
     }).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/edit-profile", data=edit_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/edit-profile", data=edit_payload, headers=auth_headers())
     edit_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert edit_res["success"] is True
     assert edit_res["summary"]["money"] == 2147483648
     assert edit_res["summary"]["casino_points"] == 2147483648
-    assert edit_res["summary"]["overall_level"] == 73
     assert edit_res["backup_path"] is not None
     assert Path(edit_res["backup_path"]).is_file()
-    print(f"[+] 4. Tab 1 - Direct Profile Editing: OK (Money: $2,147,483,648, Casino: 2,147,483,648 Cp, Lvl: 73; Backup: {Path(edit_res['backup_path']).name})")
+    print(f"[+] 4. Tab 1 - Direct Profile Editing: OK (Money: $2,147,483,648, Casino: 2,147,483,648 Cp; Backup: {Path(edit_res['backup_path']).name})")
 
     # 5. Test Casino Furniture Unlock (Tab 1)
     furn_payload = b'{}'
-    req = urllib.request.Request(f"{base_url}/api/unlock-casino-furniture", data=furn_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/unlock-casino-furniture", data=furn_payload, headers=auth_headers())
     furn_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert furn_res["success"] is True
     f_stat = furn_res["summary"]["furniture"]
@@ -131,7 +132,7 @@ def run_tests():
     # 7. Test Car Model Swap (Tab 2)
     # Swap Slot 0 to Bugatti Veyron Sang Bleu (Arch #650)
     swap_payload = json.dumps({"slot": 0, "new_archetype": 650}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/swap-car-catalog", data=swap_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/swap-car-catalog", data=swap_payload, headers=auth_headers())
     swap_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert swap_res["success"] is True
     assert swap_res["summary"]["garage"]["cars"][0]["archetype"] == 650
@@ -142,7 +143,7 @@ def run_tests():
     # 8. Test Car Tuning (Tab 2)
     # Max Tune Slot 0 (Level 4 all)
     tune_payload = json.dumps({"slot": 0, "max_tune": True}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/tune-car", data=tune_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/tune-car", data=tune_payload, headers=auth_headers())
     tune_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert tune_res["success"] is True
     upg0 = tune_res["summary"]["garage"]["cars"][0]["upgrades"]
@@ -153,7 +154,7 @@ def run_tests():
     # Custom Tune Slot 1
     if len(tune_res["summary"]["garage"]["cars"]) > 1:
         tune_custom_payload = json.dumps({"slot": 1, "acceleration": 3, "top_speed": 2, "braking": 1}).encode('utf-8')
-        req = urllib.request.Request(f"{base_url}/api/tune-car", data=tune_custom_payload, headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(f"{base_url}/api/tune-car", data=tune_custom_payload, headers=auth_headers())
         tc_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
         assert tc_res["success"] is True
         upg1 = tc_res["summary"]["garage"]["cars"][1]["upgrades"]
@@ -162,7 +163,7 @@ def run_tests():
 
     # 9. Test Manual Backup Creation (Tab 3)
     bak_payload = json.dumps({"label": "ManualTest"}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/create-backup", data=bak_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/create-backup", data=bak_payload, headers=auth_headers())
     bak_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert bak_res["success"] is True
     assert Path(bak_res["backup_path"]).is_file()
@@ -183,7 +184,7 @@ def run_tests():
     km_data = core.encrypt_save_file(b'XMBF\x01\x00\x00\x00', test_profile, "KEYMAP")
     (sandbox_dir / "KEYMAP").write_bytes(km_data)
 
-    req = urllib.request.Request(f"{base_url}/api/unpack", data=b'{}', headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/unpack", data=b'{}', headers=auth_headers())
     unpack_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert unpack_res["success"] is True
     dec_dir = Path(unpack_res["decrypt_dir"])
@@ -194,9 +195,11 @@ def run_tests():
     assert (dec_dir / "pack_save.bat").is_file()
     print(f"[+] 11. Tab 3 - Unpack Save to decrypt/: OK ({unpack_res['unpacked_count']} files unpacked in {dec_dir.name}/)")
 
-    req = urllib.request.Request(f"{base_url}/api/pack", data=b'{}', headers={"Content-Type": "application/json"})
+    pack_payload = json.dumps({"install_to_live": True}).encode('utf-8')
+    req = urllib.request.Request(f"{base_url}/api/pack", data=pack_payload, headers=auth_headers())
     pack_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert pack_res["success"] is True
+    assert pack_res["installed_to_live"] is True
     gr_dir = Path(pack_res["game_ready_dir"])
     assert gr_dir.is_dir()
     assert (gr_dir / "DATA").is_file()
@@ -205,14 +208,14 @@ def run_tests():
     # 12. Test Backup Restoration (Tab 3)
     first_backup = blist_res["backups"][0]["path"]
     rest_payload = json.dumps({"backup_path": first_backup}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/restore-backup", data=rest_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/restore-backup", data=rest_payload, headers=auth_headers())
     rest_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert rest_res["success"] is True
     print(f"[+] 12. Tab 3 - Restore Backup: OK")
 
     # 13. Verify House Adding Endpoints Are Completely Removed
     try:
-        req = urllib.request.Request(f"{base_url}/api/acquire-house", data=b'{}', headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(f"{base_url}/api/acquire-house", data=b'{}', headers=auth_headers())
         urllib.request.urlopen(req)
         assert False, "Endpoint /api/acquire-house should not exist!"
     except urllib.error.HTTPError as e:
@@ -250,7 +253,7 @@ def run_tests():
 
     # Test POST /api/save-directory with custom path
     set_dir_payload = json.dumps({"directory": str(mock_save_root)}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/save-directory", data=set_dir_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/save-directory", data=set_dir_payload, headers=auth_headers())
     dir_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert dir_res["success"] is True
     assert dir_res["custom_dir"] == str(mock_save_root.resolve())
@@ -263,12 +266,12 @@ def run_tests():
     # Verify GET /api/profiles returns version, custom_dir, and online_status
     req = urllib.request.urlopen(f"{base_url}/api/profiles")
     prof_v2 = json.loads(req.read().decode('utf-8'))
-    assert prof_v2["version"] == "2.0.2"
+    assert prof_v2["version"] == "2.0.5"
     assert prof_v2["custom_dir"] == str(mock_save_root.resolve())
     aspen_entry = next((p for p in prof_v2["profiles"] if p["profile_name"] == "Aspen"), None)
     assert aspen_entry is not None
     assert aspen_entry["online_status"]["registry_online"] is False
-    print(f"[+] 15b. GET /api/profiles v2.0.2 Metadata & Online Status: OK")
+    print(f"[+] 15b. GET /api/profiles v2.0.5 Metadata & Online Status: OK")
 
     # 16. Test Online Mode Switcher (Tab 4) - Switch to ONLINE with custom credentials
     switch_payload = json.dumps({
@@ -278,7 +281,7 @@ def run_tests():
         "email": "pilot@example.com",
         "password": "mockPassword123"
     }).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/switch-mode", data=switch_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/switch-mode", data=switch_payload, headers=auth_headers())
     switch_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert switch_res["success"] is True
     assert switch_res["target_online"] is True
@@ -330,7 +333,7 @@ def run_tests():
         "target_online": True,
         "clone_from": "Aspen"
     }).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/switch-mode", data=clone_cred_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/switch-mode", data=clone_cred_payload, headers=auth_headers())
     cc_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert cc_res["success"] is True
 
@@ -346,7 +349,7 @@ def run_tests():
         "target_profile": "AspenTwo",
         "copy_keymap": False
     }).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/clone-progression", data=clone_prog_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/clone-progression", data=clone_prog_payload, headers=auth_headers())
     cp_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert cp_res["success"] is True
     assert "target_summary" in cp_res
@@ -362,7 +365,7 @@ def run_tests():
 
     # 19. Reset Save Directory back to Documents
     reset_dir_payload = json.dumps({"reset": True}).encode('utf-8')
-    req = urllib.request.Request(f"{base_url}/api/save-directory", data=reset_dir_payload, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(f"{base_url}/api/save-directory", data=reset_dir_payload, headers=auth_headers())
     res_dir_res = json.loads(urllib.request.urlopen(req).read().decode('utf-8'))
     assert res_dir_res["success"] is True
     assert res_dir_res["custom_dir"] is None
@@ -375,11 +378,69 @@ def run_tests():
     assert "your_api_key_here" in env_example_content or "placeholder" in env_example_content or "mock" in env_example_content
     print(f"[+] 20. Public Code Hygiene Verification: OK (No real credentials, clean .env.example)")
 
+    # 21. Security Hardening: Require X-Toolkit-Token on POST
+    try:
+        no_tok_req = urllib.request.Request(f"{base_url}/api/create-backup", data=b'{}', headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(no_tok_req)
+        assert False, "Expected 403 Forbidden without X-Toolkit-Token"
+    except urllib.error.HTTPError as e:
+        assert e.code == 403
+    print("[+] 21. Security Verification: Missing X-Toolkit-Token Rejected (403 Forbidden): OK")
+
+    # 22. Security Hardening: Static File Path Traversal Prefix Bypass Blocked
+    try:
+        urllib.request.urlopen(f"{base_url}/../web_evil/test.txt")
+        assert False, "Expected 403 or 404 for path traversal"
+    except urllib.error.HTTPError as e:
+        assert e.code in (403, 404)
+    print("[+] 22. Security Verification: Static Asset Path Traversal Blocked: OK")
+
+    # 23. Security Hardening: Arbitrary Path Traversal in /api/restore-backup Blocked
+    try:
+        evil_bak_req = urllib.request.Request(
+            f"{base_url}/api/restore-backup",
+            data=json.dumps({"backup_path": "../../etc/passwd"}).encode('utf-8'),
+            headers=auth_headers()
+        )
+        urllib.request.urlopen(evil_bak_req)
+        assert False, "Expected 400 Bad Request for backup traversal"
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+    print("[+] 23. Security Verification: Backup Restore Traversal Blocked: OK")
+
+    # 24. Security Hardening: Out-of-Bounds Filesystem Probing in /api/load Blocked
+    try:
+        evil_load_req = urllib.request.Request(
+            f"{base_url}/api/load",
+            data=json.dumps({"path": "C:\\Windows\\System32\\drivers\\etc\\hosts"}).encode('utf-8'),
+            headers=auth_headers()
+        )
+        urllib.request.urlopen(evil_load_req)
+        assert False, "Expected 400 Bad Request for out-of-bounds load"
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+    print("[+] 24. Security Verification: Out-of-bounds /api/load Blocked: OK")
+
+    # 25. Security Hardening: Oversized Payload Rejected (HTTP 413)
+    try:
+        huge_headers = auth_headers()
+        huge_headers["Content-Length"] = "20000000"  # 20 MB > 10 MB limit
+        huge_req = urllib.request.Request(
+            f"{base_url}/api/create-backup",
+            data=b'{"label": "oversized"}',
+            headers=huge_headers
+        )
+        urllib.request.urlopen(huge_req)
+        assert False, "Expected 413 Payload Too Large"
+    except urllib.error.HTTPError as e:
+        assert e.code == 413
+    print("[+] 25. Security Verification: Oversized Payload Blocked (413 Payload Too Large): OK")
+
     # Cleanup sandbox
     shutil.rmtree(sandbox_dir, ignore_errors=True)
 
     print("\n" + "=" * 68)
-    print("  ALL REVISION 2 (v2.0.2) FULL TOOLKIT INTEGRATION TESTS PASSED 100%!")
+    print("  ALL FULL TOOLKIT INTEGRATION & SECURITY TESTS PASSED 100% (v2.0.5)!")
     print("=" * 68 + "\n")
 
 if __name__ == '__main__':

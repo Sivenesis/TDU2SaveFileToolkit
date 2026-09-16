@@ -337,19 +337,38 @@ Key design choices:
 
 ### 9.2 REST API Specification
 
+All mutating endpoints (`POST`) require the `X-Toolkit-Token` header matching the server's per-session token.
+
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/profiles` | Scans `%USERPROFILE%\Documents\...` and local directories for valid TDU2 profiles. |
-| `POST` | `/api/load` | Decrypts and parses the selected profile's save file, returning full dashboard metrics. |
-| `POST` | `/api/edit-profile` | Updates Money, Casino Points, and Overall Player Level with automatic safety backup. |
-| `POST` | `/api/unlock-furniture`| Executes all-in-one unlock for all 383 furniture items, 61 materials, and VIP Suite. |
+| `GET` | `/api/profiles` | Scans active save directory (default Documents or custom path) and returns profiles with online status. |
+| `POST` | `/api/load` | Validates path boundary and loads save metrics for active profile. |
+| `POST` | `/api/save-directory` | Validates and configures a custom TDU2 save directory, or resets to default Documents. |
+| `POST` | `/api/edit-profile` | Updates Money (up to $2,147,483,648), Casino Points (up to 2,147,483,648 Cp), and Level (1-73). |
+| `POST` | `/api/unlock-casino-furniture` | Unlocks the VIP Penthouse suite decor and casino furniture set. |
 | `GET` | `/api/cars-catalog` | Serves the 359-vehicle database for model swap selection. |
-| `POST` | `/api/swap-car-catalog`| Replaces the vehicle model in a designated garage slot. |
+| `POST` | `/api/swap-car-catalog` | Replaces the vehicle model in a designated garage slot. |
 | `POST` | `/api/tune-car` | Sets tuning stages (0-4) for Acceleration, Top Speed, and Braking for a car. |
+| `POST` | `/api/swap-slots` | Swaps positions and properties between two garage slots. |
 | `POST` | `/api/unpack` | Decrypts `DATA`, `KEYMAP`, `OPTIONS` and exports formatted JSON into `decrypt/`. |
-| `POST` | `/api/pack` | Compiles and re-encrypts modified files from `decrypt/` into game-ready saves. |
+| `POST` | `/api/pack` | Compiles JSON into binary XMBF and game-ready saves (supports `install_to_live: bool`). |
 | `GET` | `/api/backups` | Lists timestamped `.bak` files available for the current profile. |
-| `POST` | `/api/restore-backup` | Restores a selected backup file over the active `DATA` container. |
+| `POST` | `/api/create-backup` | Creates a timestamped manual backup in `Backups/<Profile>/`. |
+| `POST` | `/api/restore-backup` | Restores a selected backup file (strictly constrained to `Backups/`). |
+| `POST` | `/api/switch-mode` | Toggles Online/Offline status across `ProfileList.dat` and `OPTIONS` with transaction rollback. |
+| `POST` | `/api/clone-progression` | Transfers full offline progression into a registered online profile, preserving server identity. |
+
+### 9.3 Security Architecture, Atomic Operations & File Isolation (v2.0.3 - v2.0.5)
+
+Versions 2.0.3 - 2.0.5 implement an enterprise-grade local security posture and container safeguards:
+- **Origin Hardening & CSRF Protection**: Wildcard `Access-Control-Allow-Origin: *` was completely removed. Responses strictly validate the `Origin` header to permit only local loopback traffic (`127.0.0.1` and `localhost`). In addition, the server generates an ephemeral cryptographically secure random token (`secrets.token_hex(16)`) at startup and injects it into `<meta name="toolkit-token">`. All state-mutating requests (`POST`) require this token via the `X-Toolkit-Token` header.
+- **Path Boundary Containment**: To prevent path traversal attacks, static file serving and backup restoration enforce strict `pathlib.Path.relative_to` checks against `web/` and `Backups/` respectively. The `/api/load` endpoint verifies containment within registered save folders, while `/api/save-directory` verifies valid TDU2 file markers before changing active search paths.
+- **Atomic File Writes**: Direct file stream writing (`with open(..., 'wb')`) was eliminated across the entire toolkit. All writes are performed via `atomic_write()`: writing to a temporary file (`.tmp_<pid>`), flushing, executing `os.fsync()`, and executing `os.replace()`. This ensures that power cuts, app crashes, or antivirus locks cannot produce corrupted zero-byte save files.
+- **Transactional Rollback**: Multi-file mutations (e.g. modifying both `ProfileList.dat` and `OPTIONS` in mode switching) create pre-operation backups and roll back modified files if any subsequent step encounters an error.
+- **KEYMAP and OPTIONS File Isolation**: DirectInput/XInput hardware controller mappings in `KEYMAP` and user preferences in `OPTIONS` are strictly isolated and protected from unintentional overwriting. Synthetic re-serialization of `KEYMAP` is blocked to prevent controller corruption. `OPTIONS` is only modified when synchronizing `IsOnlineEnabledProfile` during mode switching.
+- **Level Editing Investigation (WIP)**: Direct modification of `Driver.Level` was paused in the WebGUI because TDU2 dynamically computes overall driver level from 4 category point trees (`PlayerLevels`).
+- **Payload Denial of Service Prevention**: Requests exceeding `MAX_CONTENT_LENGTH = 10 * 1024 * 1024` (10 MB) are rejected immediately with HTTP 413 (Payload Too Large).
+- **Credential Privacy**: Online account passwords in the decrypted `OPTIONS` container are kept strictly internal to backend conversion routines and are never transmitted across HTTP API responses.
 
 ---
 
@@ -365,4 +384,4 @@ When extending or modifying this codebase:
    ```bash
    python test_server_api.py
    ```
-   This runs a 14-stage automated integration test verifying static file delivery, profile editing, car swapping, stage tuning, backup restoration, unpack/pack cryptographic round-tripping, and DES-CBC integrity.
+   This runs a 25-stage automated integration and security test suite verifying static file delivery, profile editing, car swapping, stage tuning, backup restoration, unpack/pack cryptographic round-tripping, DES-CBC integrity, CSRF token validation, path traversal blocking, backup containment, and payload limits.

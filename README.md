@@ -1,4 +1,4 @@
-# Test Drive Unlimited 2 Save File Toolkit (WebGUI) v2.0.2
+# Test Drive Unlimited 2 Save File Toolkit (WebGUI) v2.0.5
 
 A zero-dependency local web interface and editing engine for *Test Drive Unlimited 2* save files on Windows PC.
 
@@ -13,9 +13,15 @@ WARNING: THIS TOOLKIT IS INTENDED FOR USE ON TDU2 WITH TDUWORLD MOD INSTALLED. C
 This toolkit provides an offline, browser-based interface for inspecting, editing, tuning, repairing, and managing online/offline status for TDU2 PC save files. The software runs entirely on the Python standard library with no external third-party dependencies or installations required.
 
 ### Core Capabilities
+- **Security Hardening & Atomic Writes**:
+  - **CSRF Protection & Origin Hardening**: Removed wildcard CORS `*`. Requests are restricted to local loopback origins (`127.0.0.1` / `localhost`) and secured via an ephemeral per-session `X-Toolkit-Token`, preventing external websites from tampering with local save files.
+  - **Path Traversal & Overwrite Protections**: Strict `pathlib.Path.relative_to` boundary checks block static file prefix bypasses and restrict `/api/restore-backup` strictly within the `Backups/` repository. File loading is constrained to authorized save roots.
+  - **Atomic File Writing**: All save updates (`DATA`, `OPTIONS`, `ProfileList.dat`) write to `<file>.tmp_<pid>` with `os.fsync()` before atomic `os.replace()`, preventing corrupt partial writes on system crash or sudden power loss. Multi-file operations feature automated rollback.
+  - **Hardware Controls & Settings Safeguard**: Control bindings (`KEYMAP`) and global settings (`OPTIONS`) are strictly preserved and protected from unintended overwrites or synthetic serialization corruption.
+  - **DoS & Privacy Guards**: 10 MB maximum request payload limit to prevent memory exhaustion, and sensitive passwords are never exposed across API responses.
 - **Save Path Detection & Active Path Isolation**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables. Additionally, if profiles do not appear in the dropdown menu, you can specify a custom path.
 - **Tab 1: Player Profile Editor**:
-  - **Player Finances & Level**: Edit Driver Money (up to $2,147,483,648), Casino Points (up to 2,147,483,648 Cp), and Overall Player Level (1 to 73).
+  - **Player Finances**: Edit Driver Money (up to $2,147,483,648) and Casino Points (up to 2,147,483,648 Cp). *(Note: Level editing is temporarily disabled while calculation logic is under investigation - WIP)*.
   - **Profile Mode Status**: Live status indicator and quick toggle between Single-Player Offline and Multiplayer Online modes.
   - **Casino Furniture Unlocker**: One-click unlock for the exclusive Casino furniture suite for residences.
 - **Tab 2: Garage Editor**:
@@ -23,12 +29,12 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
   - **Vehicle Swapping**: Safely swap any owned vehicle with any model from the complete 359-vehicle catalog.
   - **Performance Tuning**: Adjust individual tuning stages (Acceleration, Top Speed, Braking from Level 0 to 4) or apply one-click maximum tuning per car.
 - **Tab 3: Save Files Manipulation**:
-  - **Decrypted Save File Manipulation**: Unpack encrypted `DATA`, `KEYMAP`, and `OPTIONS` containers into formatted JSON and raw binary templates in a dedicated `decrypt/` folder, with one-click re-encryption and packaging back to game-ready saves.
+  - **Decrypted Save File Manipulation**: Unpack encrypted `DATA` container into formatted JSON and raw binary templates in a dedicated `decrypt/` folder, with one-click re-encryption and packaging back to game-ready saves. Player controller bindings (`KEYMAP`) and preferences (`OPTIONS`) are protected from live overwrites.
   - **Automated Backup Manager**: Generates safety backups before every write operation and provides a built-in restoration interface.
 - **Tab 4: Online Mode Switcher**:
   - **Online vs. Offline Mode Switcher**: Inspects and toggles profiles between Single-Player Offline and Multiplayer Online mode. Synchronously patches `ProfileList.dat` (byte 256: `0xFF`=Online, `0x00`=Offline) and the encrypted `OPTIONS` container (`IsOnlineEnabledProfile`).
   - **Online Account Credentials Management**: Configure multiplayer credentials when switching to online mode—either clone credentials from an existing registered profile or enter custom login credentials.
-  - **Progression Transfer into Server-Registered Profiles**: Fixes multiplayer "Invalid Nickname" server rejections. Injects full offline progress (cash, houses, tuned cars, discovered roads) directly into an existing server-registered online profile while 100% preserving the target's online nickname, 8-byte Profile UUID, DLC tokens (`Extends`), and credentials.
+  - **Progression Transfer into Server-Registered Profiles**: Fixes multiplayer "Invalid Nickname" server rejections. Injects full offline progress (cash, houses, tuned cars, discovered roads) directly into an existing server-registered online profile while 100% preserving the target's online nickname, 8-byte Profile UUID, DLC tokens (`Extends`), credentials, and hardware control bindings (`KEYMAP`).
 
 ---
 
@@ -48,7 +54,7 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
 3. In the header profile selector, select your profile and click **Load Profile**.
    - *If your saves are stored in an alternate directory*, click **Custom Path...** (or click the prompt *"Can't see your profiles? Specify custom savegame path"*), enter your folder, and click **Apply Path**. You can reset back to standard Documents at any time with one click.
 4. Use the four dedicated tabs to inspect, edit, and manage your game data:
-    - **Tab 1: Player Profile Editor**: Update money (up to $2,147,483,648), casino points (up to 2,147,483,648 Cp), and level, view online status, or unlock casino furniture. Click **Save Profile Changes** to write changes to disk.
+    - **Tab 1: Player Profile Editor**: Update money (up to $2,147,483,648) and casino points (up to 2,147,483,648 Cp), view online status, or unlock casino furniture. Click **Save Profile Changes** to write changes to disk.
    - **Tab 2: Garage Editor**: Browse owned properties. Use the **Tune** button to set performance stages (0 to 4) or click **Max All (Lvl 4)**. Use the **Swap Car** button to replace a car model.
    - **Tab 3: Save Files Manipulation**: Click **Unpack Save to decrypt/** to export human-readable `.json` files. After manual edits, click **Pack from decrypt/ to Game-Ready Save** to re-encrypt and install. Previous versions can be restored at any time from the Backups table.
    - **Tab 4: Online Mode Switcher**: View all registered profiles, their `ProfileList.dat` flags, and `OPTIONS` container states. One-click switch between Online and Offline modes, configure multiplayer login credentials, or clone progression from an offline save into a registered online profile.
