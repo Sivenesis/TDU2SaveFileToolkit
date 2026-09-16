@@ -13,12 +13,6 @@ WARNING: THIS TOOLKIT IS INTENDED FOR USE ON TDU2 WITH TDUWORLD MOD INSTALLED. C
 This toolkit provides an offline, browser-based interface for inspecting, editing, tuning, repairing, and managing online/offline status for TDU2 PC save files. The software runs entirely on the Python standard library with no external third-party dependencies or installations required.
 
 ### Core Capabilities
-- **Security Hardening & Atomic Writes**:
-  - **CSRF Protection & Origin Hardening**: Removed wildcard CORS `*`. Requests are restricted to local loopback origins (`127.0.0.1` / `localhost`) and secured via an ephemeral per-session `X-Toolkit-Token`, preventing external websites from tampering with local save files.
-  - **Path Traversal & Overwrite Protections**: Strict `pathlib.Path.relative_to` boundary checks block static file prefix bypasses and restrict `/api/restore-backup` strictly within the `Backups/` repository. File loading is constrained to authorized save roots.
-  - **Atomic File Writing**: All save updates (`DATA`, `OPTIONS`, `ProfileList.dat`) write to `<file>.tmp_<pid>` with `os.fsync()` before atomic `os.replace()`, preventing corrupt partial writes on system crash or sudden power loss. Multi-file operations feature automated rollback.
-  - **Hardware Controls & Settings Safeguard**: Control bindings (`KEYMAP`) and global settings (`OPTIONS`) are strictly preserved and protected from unintended overwrites or synthetic serialization corruption.
-  - **DoS & Privacy Guards**: 10 MB maximum request payload limit to prevent memory exhaustion, and sensitive passwords are never exposed across API responses.
 - **Save Path Detection & Active Path Isolation**: Automatically inspects the standard Windows Documents folder by default (`Documents\Eden Games\Test Drive Unlimited 2\savegame`). When a custom path is configured, discovery is strictly isolated to the active directory, displaying clean profile entries (`<Profile> [Online/Offline]`) and preventing cross-directory pollution in the dropdown and registry status tables. Additionally, if profiles do not appear in the dropdown menu, you can specify a custom path.
 - **Tab 1: Player Profile Editor**:
   - **Player Finances**: Edit Driver Money (up to $2,147,483,648) and Casino Points (up to 2,147,483,648 Cp). *(Note: Level editing is temporarily disabled while calculation logic is under investigation - WIP)*.
@@ -35,6 +29,13 @@ This toolkit provides an offline, browser-based interface for inspecting, editin
   - **Online vs. Offline Mode Switcher**: Inspects and toggles profiles between Single-Player Offline and Multiplayer Online mode. Synchronously patches `ProfileList.dat` (byte 256: `0xFF`=Online, `0x00`=Offline) and the encrypted `OPTIONS` container (`IsOnlineEnabledProfile`).
   - **Online Account Credentials Management**: Configure multiplayer credentials when switching to online mode—either clone credentials from an existing registered profile or enter custom login credentials.
   - **Progression Transfer into Server-Registered Profiles**: Fixes multiplayer "Invalid Nickname" server rejections. Injects full offline progress (cash, houses, tuned cars, discovered roads) directly into an existing server-registered online profile while 100% preserving the target's online nickname, 8-byte Profile UUID, DLC tokens (`Extends`), credentials, and hardware control bindings (`KEYMAP`).
+ 
+  - **Security Hardening & Atomic Writes**:
+  - **CSRF Protection & Origin Hardening**: Removed wildcard CORS `*`. Requests are restricted to local loopback origins (`127.0.0.1` / `localhost`) and secured via an ephemeral per-session `X-Toolkit-Token`, preventing external websites from tampering with local save files.
+  - **Path Traversal & Overwrite Protections**: Strict `pathlib.Path.relative_to` boundary checks block static file prefix bypasses and restrict `/api/restore-backup` strictly within the `Backups/` repository. File loading is constrained to authorized save roots.
+  - **Atomic File Writing**: All save updates (`DATA`, `OPTIONS`, `ProfileList.dat`) write to `<file>.tmp_<pid>` with `os.fsync()` before atomic `os.replace()`, preventing corrupt partial writes on system crash or sudden power loss. Multi-file operations feature automated rollback.
+  - **Hardware Controls & Settings Safeguard**: Control bindings (`KEYMAP`) and global settings (`OPTIONS`) are strictly preserved and protected from unintended overwrites or synthetic serialization corruption.
+  - **DoS & Privacy Guards**: 10 MB maximum request payload limit to prevent memory exhaustion, and sensitive passwords are never exposed across API responses.
 
 ---
 
@@ -87,7 +88,9 @@ python tdu2_save_tool.py clone-progression "OfflineProfile" "OnlineProfile" --di
 ## Known Issues
 
 > [!NOTE]
-> **Known issue:** Level editing doesn't work on online profiles (Work in progress).
+> **Known issue:**
+> 1. Level editing doesn't work. (WIP)
+> 2. House names can be wrong, but underlying functionality works as intended.
 
 ---
 
