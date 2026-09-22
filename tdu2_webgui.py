@@ -22,11 +22,14 @@ import secrets
 
 # Import the core TDU2 save engine from local directory
 import tdu2_save_tool as core
+from tdu2_level_engine import TDU2LevelEngine
 
-TOOLKIT_VERSION = "2.0.5"
+TOOLKIT_VERSION = "3.0.4"
 PORT = 8282
 SESSION_TOKEN = secrets.token_hex(16)
 MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB payload limit
+
+ACTIVE_LEVEL_ENGINE = None
 
 WORKSPACE_DIR = Path(__file__).parent.resolve()
 WEB_DIR = WORKSPACE_DIR / 'web'
@@ -65,18 +68,26 @@ if CARS_DATABASE_PATH.is_file():
 HOUSES_DATABASE_PATH = WORKSPACE_DIR / 'houses_database.json'
 HOUSES_DB = {}
 KNOWN_HOUSE_HCS = {}
+HOUSE_BY_HC = {}
+HOUSE_BY_SPOT = {}
 if HOUSES_DATABASE_PATH.is_file():
     try:
         with open(HOUSES_DATABASE_PATH, 'r', encoding='utf-8') as f:
             HOUSES_DB = json.load(f)
             KNOWN_HOUSE_HCS = {int(k): v for k, v in HOUSES_DB.get('known_hcs', {}).items()}
+            for h in HOUSES_DB.get('houses', []):
+                if h.get('house_hc'):
+                    HOUSE_BY_HC[int(h['house_hc'])] = h
+                if h.get('spot_name'):
+                    HOUSE_BY_SPOT[h['spot_name']] = h
     except Exception as e:
         print(f"[!] Warning loading houses_database.json: {e}")
 
 
 def resolve_house_info(house_hc: int, slot_count: int = 0) -> dict:
     """
-    Resolves a 64-bit HouseHC into authentic house name, island, level, and capacity.
+    Resolves a 64-bit HouseHC into authentic house name, island, level, and capacity,
+    plus internal entity ID and spot name.
     """
     if house_hc in KNOWN_HOUSE_HCS:
         info = dict(KNOWN_HOUSE_HCS[house_hc])
@@ -84,6 +95,27 @@ def resolve_house_info(house_hc: int, slot_count: int = 0) -> dict:
         info['house_hc'] = str(house_hc)
         info['house_hex'] = f"0x{house_hc:016X}"
         info['display_name'] = f"{info['island']} - {info['name']}"
+
+        # Match internal id, spot name, and code
+        matched_house = HOUSE_BY_HC.get(house_hc) or HOUSE_BY_SPOT.get(info.get('spot'))
+        if matched_house:
+            info['internal_id'] = matched_house.get('id')
+            info['spot_name'] = matched_house.get('spot_name') or info.get('spot')
+            info['code'] = matched_house.get('code')
+        else:
+            info['internal_id'] = None
+            info['spot_name'] = info.get('spot')
+            info['code'] = None
+
+        if info.get('internal_id') and info.get('spot_name'):
+            info['internal_display'] = f"#{info['internal_id']} • {info['spot_name']}"
+        elif info.get('spot_name'):
+            info['internal_display'] = info['spot_name']
+        elif info.get('internal_id'):
+            info['internal_display'] = f"#{info['internal_id']}"
+        else:
+            info['internal_display'] = f"0x{house_hc:016X}"
+
         return info
 
     # Fallback resolution using byte analysis
@@ -113,7 +145,11 @@ def resolve_house_info(house_hc: int, slot_count: int = 0) -> dict:
         "island": island,
         "level": level,
         "slots": slots,
-        "spot": "Owned House"
+        "spot": "Owned House",
+        "internal_id": None,
+        "spot_name": None,
+        "code": None,
+        "internal_display": f"0x{house_hc:016X}"
     }
 
 
@@ -510,6 +546,42 @@ def extract_save_summary(data_obj, prof_name, source_path):
         tuning_stage = max(accel_lvl, speed_lvl, brake_lvl)
         is_max_tune = (accel_lvl == 4 and speed_lvl == 4 and brake_lvl == 4)
 
+        # Vehicle customization options & active indices
+        paint_type = car_data.get('PaintType', 0)
+        paint_idx = car_data.get('PaintIndice', 0)
+        rim_idx = car_data.get('RimIndice', 0)
+        interior_idx = car_data.get('InteriorIndice', 0)
+
+        car_opts = CARS_DB.get(str(archetype_id), {})
+        has_opts = car_opts.get('has_options', False)
+        has_cols = car_opts.get('has_colors', False)
+        has_rims = car_opts.get('has_rims', False)
+        has_ints = car_opts.get('has_interiors', False)
+        cols_list = car_opts.get('colors', [])
+        rims_list = car_opts.get('rims', [])
+
+        col_name = "Factory Stock"
+        if 0 <= paint_idx < len(cols_list):
+            col_name = cols_list[paint_idx].get('name', col_name)
+        elif not has_cols:
+            col_name = "Fixed Specification"
+
+        rim_name = "Standard Wheels"
+        if 0 <= rim_idx < len(rims_list):
+            rim_name = rims_list[rim_idx].get('name', rim_name)
+        elif not has_rims:
+            rim_name = "Fixed Specification"
+
+        int_name = "Standard Trim"
+        if 0 <= paint_idx < len(cols_list):
+            ints_arr = cols_list[paint_idx].get('interiors', [])
+            for item in ints_arr:
+                if item.get('index') == interior_idx:
+                    int_name = item.get('name', int_name)
+                    break
+        elif not has_ints:
+            int_name = "Fixed Specification"
+
         car_item = {
             "index": idx,
             "slot": idx,  # Global index in PlayerData.Garage (0..N-1)
@@ -535,7 +607,20 @@ def extract_save_summary(data_obj, prof_name, source_path):
                 "braking": brake_lvl
             },
             "tuning_stage": tuning_stage,
-            "is_max_tune": is_max_tune
+            "is_max_tune": is_max_tune,
+            "paint_type": paint_type,
+            "paint_indice": paint_idx,
+            "rim_indice": rim_idx,
+            "interior_indice": interior_idx,
+            "color_name": col_name,
+            "rim_name": rim_name,
+            "interior_name": int_name,
+            "has_options": has_opts,
+            "has_colors": has_cols,
+            "has_rims": has_rims,
+            "has_interiors": has_ints,
+            "colors_count": len(cols_list),
+            "rims_count": len(rims_list)
         }
         car_list.append(car_item)
         if house_hc not in house_groups:
@@ -557,6 +642,10 @@ def extract_save_summary(data_obj, prof_name, source_path):
             "level": h_info['level'],
             "slots_total": h_info['slots'],
             "slots_occupied": occupied_cnt,
+            "internal_id": h_info.get('internal_id'),
+            "spot_name": h_info.get('spot_name'),
+            "code": h_info.get('code'),
+            "internal_display": h_info.get('internal_display', ''),
             "cars": h_cars
         })
 
@@ -600,6 +689,13 @@ def extract_save_summary(data_obj, prof_name, source_path):
         except Exception:
             pass
 
+    casino_dict = data_obj.get('Casino')
+    casino_pts = 0
+    if isinstance(casino_dict, dict) and 'money' in casino_dict:
+        casino_pts = casino_dict.get('money', 0)
+    if casino_pts == 0 and driver.get('NbCoupon', 0) > 0:
+        casino_pts = driver.get('NbCoupon', 0)
+
     return {
         "profile_name": prof_name,
         "driver_name": driver.get('Name') or prof_name,
@@ -613,7 +709,7 @@ def extract_save_summary(data_obj, prof_name, source_path):
             "has_credentials": active_has_creds
         },
         "money": driver.get('Money', 0),
-        "casino_points": driver.get('NbCoupon', 0),
+        "casino_points": casino_pts,
         "overall_level": calculate_player_level(data_obj),
         "levels": {
             "racing": levels.get('RacingLevel', 0),
@@ -711,6 +807,13 @@ def load_save_file(target_path_str, profile_name_override=None):
         "last_backup_path": None
     }
 
+    global ACTIVE_LEVEL_ENGINE
+    try:
+        ACTIVE_LEVEL_ENGINE = TDU2LevelEngine(str(data_file), prof_name)
+    except Exception as e:
+        print(f"[!] Warning initializing TDU2LevelEngine: {e}")
+        ACTIVE_LEVEL_ENGINE = None
+
     summary = extract_save_summary(data_obj, prof_name, data_file)
     return summary
 
@@ -748,6 +851,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        global ACTIVE_LEVEL_ENGINE
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -827,6 +931,29 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             self.send_json({"success": True, "data": loaded_save_state["data_dict"]})
             return
 
+        # --- API: PROGRESSION STATE ---
+        elif path == '/api/progression/state':
+            if not ACTIVE_LEVEL_ENGINE:
+                if loaded_save_state.get("source_path") and loaded_save_state.get("profile_name"):
+                    try:
+                        ACTIVE_LEVEL_ENGINE = TDU2LevelEngine(
+                            loaded_save_state["source_path"],
+                            loaded_save_state["profile_name"]
+                        )
+                    except Exception as e:
+                        self.send_error_json(f"Failed to load progression state: {e}")
+                        return
+                else:
+                    self.send_error_json("No save profile loaded. Please load a profile first.")
+                    return
+
+            try:
+                state = ACTIVE_LEVEL_ENGINE.get_full_state()
+                self.send_json({"success": True, "state": state})
+            except Exception as e:
+                self.send_error_json(f"Failed to get progression state: {e}")
+            return
+
         # --- STATIC ASSETS ---
         rel_path = path.lstrip('/')
         if not rel_path or rel_path == 'index.html':
@@ -860,7 +987,7 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             self.send_error(404, "File Not Found")
 
     def do_POST(self):
-        global CUSTOM_SAVEGAME_DIR
+        global CUSTOM_SAVEGAME_DIR, ACTIVE_LEVEL_ENGINE
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -1240,6 +1367,155 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_error_json(f"Failed to tune car: {e}")
             return
 
+        # --- CUSTOMIZE VEHICLE OPTIONS (TAB 2: COLOR, RIMS, INTERIOR) ---
+        elif path == '/api/customize-car':
+            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+                self.send_error_json("No save file loaded. Please load a save first.")
+                return
+
+            slot = payload.get('slot')
+            if slot is None:
+                self.send_error_json("Parameter 'slot' is required.")
+                return
+
+            paint_idx = payload.get('paint_indice')
+            rim_idx = payload.get('rim_indice')
+            interior_idx = payload.get('interior_indice')
+
+            try:
+                save_path = Path(loaded_save_state["source_path"])
+                data_obj = loaded_save_state["data_dict"]
+                prof_name = loaded_save_state["profile_name"]
+                footer = loaded_save_state["footer"]
+                target_fname = loaded_save_state["target_filename"]
+                raw_xmbf = loaded_save_state["raw_xmbf"]
+                root_name = loaded_save_state["root_name"]
+
+                slot_int = int(slot)
+                bak_path = create_operation_backup(save_path, prof_name, f"CarCustomize_Slot{slot_int+1}")
+
+                data_obj, msg = core.customize_garage_car(
+                    data_obj,
+                    slot_int,
+                    paint_idx=paint_idx,
+                    rim_idx=rim_idx,
+                    interior_idx=interior_idx,
+                    cars_db=CARS_DB
+                )
+
+                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
+                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
+
+                core.atomic_write(save_path, enc_save)
+
+                loaded_save_state["raw_xmbf"] = new_xmbf
+                summary = extract_save_summary(data_obj, prof_name, save_path)
+
+                self.send_json({
+                    "success": True,
+                    "message": msg,
+                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "summary": summary
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed to customize car: {e}")
+            return
+
+        # --- PROGRESSION: SET OBJECTIVE ---
+        elif path == '/api/progression/set-objective':
+            if not ACTIVE_LEVEL_ENGINE:
+                if loaded_save_state.get("source_path") and loaded_save_state.get("profile_name"):
+                    try:
+                        ACTIVE_LEVEL_ENGINE = TDU2LevelEngine(
+                            loaded_save_state["source_path"],
+                            loaded_save_state["profile_name"]
+                        )
+                    except Exception as e:
+                        self.send_error_json(f"Failed to initialize progression engine: {e}")
+                        return
+                else:
+                    self.send_error_json("No save profile loaded.")
+                    return
+
+            obj_id = payload.get('id')
+            val = payload.get('value')
+            if obj_id is None or val is None:
+                self.send_error_json("Parameters 'id' and 'value' are required.")
+                return
+
+            try:
+                ACTIVE_LEVEL_ENGINE.set_objective(obj_id, val)
+
+                bak_path = None
+                def make_obj_bak(dest_p, prof_n):
+                    nonlocal bak_path
+                    bak_path = create_operation_backup(dest_p, prof_n, f"Progression_Obj_{obj_id}")
+
+                ACTIVE_LEVEL_ENGINE.save(backup_callback=make_obj_bak)
+
+                # Sync loaded_save_state with newly saved data
+                loaded_save_state["data_dict"] = ACTIVE_LEVEL_ENGINE.data_dict
+                loaded_save_state["raw_xmbf"] = ACTIVE_LEVEL_ENGINE.template_xmbf
+
+                state = ACTIVE_LEVEL_ENGINE.get_full_state()
+                self.send_json({
+                    "success": True,
+                    "message": f"Objective '{obj_id}' updated successfully.",
+                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "state": state
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed to set objective: {e}")
+            return
+
+        # --- PROGRESSION: APPLY PRESET ---
+        elif path == '/api/progression/preset':
+            if not ACTIVE_LEVEL_ENGINE:
+                if loaded_save_state.get("source_path") and loaded_save_state.get("profile_name"):
+                    try:
+                        ACTIVE_LEVEL_ENGINE = TDU2LevelEngine(
+                            loaded_save_state["source_path"],
+                            loaded_save_state["profile_name"]
+                        )
+                    except Exception as e:
+                        self.send_error_json(f"Failed to initialize progression engine: {e}")
+                        return
+                else:
+                    self.send_error_json("No save profile loaded.")
+                    return
+
+            preset_type = payload.get('type')
+            target = payload.get('target')
+            if not preset_type:
+                self.send_error_json("Parameter 'type' is required.")
+                return
+
+            try:
+                ACTIVE_LEVEL_ENGINE.apply_preset(preset_type, target=target)
+
+                bak_path = None
+                target_str = f"_{target}" if target else ""
+                def make_preset_bak(dest_p, prof_n):
+                    nonlocal bak_path
+                    bak_path = create_operation_backup(dest_p, prof_n, f"Progression_Preset_{preset_type}{target_str}")
+
+                ACTIVE_LEVEL_ENGINE.save(backup_callback=make_preset_bak)
+
+                # Sync loaded_save_state
+                loaded_save_state["data_dict"] = ACTIVE_LEVEL_ENGINE.data_dict
+                loaded_save_state["raw_xmbf"] = ACTIVE_LEVEL_ENGINE.template_xmbf
+
+                state = ACTIVE_LEVEL_ENGINE.get_full_state()
+                self.send_json({
+                    "success": True,
+                    "message": f"Progression preset '{preset_type}' applied successfully.",
+                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "state": state
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed to apply preset: {e}")
+            return
+
         # --- SWAP POSITIONS BETWEEN SLOTS (TAB 2) ---
         elif path == '/api/swap-slots':
             if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
@@ -1545,6 +1821,96 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 })
             except Exception as e:
                 self.send_error_json(f"Failed to pack save: {e}")
+            return
+
+        # --- PROGRESSION: SET OBJECTIVE ---
+        elif path == '/api/progression/set-objective':
+            if not loaded_save_state["source_path"] or not loaded_save_state["profile_name"]:
+                self.send_error_json("No save file loaded. Please load a save first.")
+                return
+
+            obj_id = payload.get('id')
+            value = payload.get('value')
+            if obj_id is None or value is None:
+                self.send_error_json("Parameters 'id' and 'value' are required.")
+                return
+
+            if not ACTIVE_LEVEL_ENGINE:
+                try:
+                    ACTIVE_LEVEL_ENGINE = TDU2LevelEngine(
+                        loaded_save_state["source_path"],
+                        loaded_save_state["profile_name"]
+                    )
+                except Exception as e:
+                    self.send_error_json(f"Failed initializing level engine: {e}")
+                    return
+
+            try:
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
+
+                bak_path = create_operation_backup(save_path, prof_name, f"PreProg_{obj_id}")
+                ACTIVE_LEVEL_ENGINE.set_objective(obj_id, value)
+                ACTIVE_LEVEL_ENGINE.save(str(save_path), backup_callback=None)
+
+                # Synchronize in-memory loaded_save_state with updated data
+                loaded_save_state["data_dict"] = ACTIVE_LEVEL_ENGINE.data_dict
+                loaded_save_state["raw_xmbf"] = ACTIVE_LEVEL_ENGINE.template_xmbf
+
+                full_state = ACTIVE_LEVEL_ENGINE.get_full_state()
+                self.send_json({
+                    "success": True,
+                    "message": f"Objective '{obj_id}' updated successfully.",
+                    "state": full_state,
+                    "backup_path": str(bak_path.resolve()) if bak_path else None
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed updating objective '{obj_id}': {e}")
+            return
+
+        # --- PROGRESSION: APPLY PRESET ---
+        elif path == '/api/progression/preset':
+            if not loaded_save_state["source_path"] or not loaded_save_state["profile_name"]:
+                self.send_error_json("No save file loaded. Please load a save first.")
+                return
+
+            preset_type = payload.get('type')
+            target = payload.get('target')
+            if not preset_type:
+                self.send_error_json("Parameter 'type' is required.")
+                return
+
+            if not ACTIVE_LEVEL_ENGINE:
+                try:
+                    ACTIVE_LEVEL_ENGINE = TDU2LevelEngine(
+                        loaded_save_state["source_path"],
+                        loaded_save_state["profile_name"]
+                    )
+                except Exception as e:
+                    self.send_error_json(f"Failed initializing level engine: {e}")
+                    return
+
+            try:
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
+
+                bak_path = create_operation_backup(save_path, prof_name, f"PreProgPreset_{preset_type}")
+                ACTIVE_LEVEL_ENGINE.apply_preset(preset_type, target)
+                ACTIVE_LEVEL_ENGINE.save(str(save_path), backup_callback=None)
+
+                # Synchronize in-memory loaded_save_state with updated data
+                loaded_save_state["data_dict"] = ACTIVE_LEVEL_ENGINE.data_dict
+                loaded_save_state["raw_xmbf"] = ACTIVE_LEVEL_ENGINE.template_xmbf
+
+                full_state = ACTIVE_LEVEL_ENGINE.get_full_state()
+                self.send_json({
+                    "success": True,
+                    "message": f"Progression preset '{preset_type}' applied successfully.",
+                    "state": full_state,
+                    "backup_path": str(bak_path.resolve()) if bak_path else None
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed applying preset '{preset_type}': {e}")
             return
 
         else:

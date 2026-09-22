@@ -38,8 +38,7 @@
           </svg>
         </div>
         <div class="brand-text">
-          <div class="brand-title">TDU2 SAVE FILE TOOLKIT <span class="brand-version-badge">v2.0.5</span></div>
-          <div class="brand-subtitle">Test Drive Unlimited 2 • Profile, Garage, Save Editor & Online Switcher</div>
+          <div class="brand-title">TDU2 SAVE FILE TOOLKIT <span class="brand-version-badge">v3.0.4</span></div>
         </div>
       </div>
 
@@ -89,10 +88,6 @@
           <span class="path-label">Active Save:</span>
           <span class="path-value" id="activePathText">No profile selected. Choose a profile from the dropdown and click 'Load Profile'.</span>
         </div>
-        <div class="save-path-helper" id="savePathHelper">
-          <span class="helper-text">Can't see your profiles?</span>
-          <button type="button" class="link-btn" id="btnSpecifyPathPrompt">Specify custom savegame or profile path &rarr;</button>
-        </div>
       </div>
 
       <div class="custom-path-banner" id="customPathActiveBanner" style="display: none;">
@@ -102,17 +97,20 @@
       </div>
     </section>
 
-    <!-- Navigation Tabs (4 Tabs) -->
+    <!-- Navigation Tabs (5 Tabs) -->
     <nav class="app-tabs">
       <button class="tab-btn active" data-tab="tab-profile">
         Player Profile Editor
       </button>
+      <button class="tab-btn" data-tab="tab-progression" id="tabBtnProgression">
+        Progression Editor
+      </button>
       <button class="tab-btn" data-tab="tab-garage">
         Garage Editor (<span id="garageTabCount">0</span>)
       </button>
-      <button class="tab-btn" data-tab="tab-save-tools">
-        Save Files Manipulation
-      </button>
+        <button class="tab-btn" data-tab="tab-save-tools">
+          Backup Manager
+        </button>
       <button class="tab-btn" data-tab="tab-online-switch">
         Online Mode Switcher
       </button>
@@ -152,7 +150,7 @@
           <!-- Main Profile Form -->
           <div class="glass-card editor-card">
             <div class="card-header">
-              <h3>Player Overview & Progression</h3>
+              <h3>Driver Finances & Account Status</h3>
               <span class="badge" id="driverBadge">Driver: --</span>
             </div>
 
@@ -168,24 +166,8 @@
               </div>
             </div>
 
-            <!-- Objectives Notice (Feature In Development) -->
-            <div class="objectives-notice-banner">
-              <div class="notice-icon">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                </svg>
-              </div>
-              <div class="notice-text">
-                <strong>Objectives & Event Progression:</strong> Game objectives and license/challenge progressions are
-                currently not editable (module in development for a future release).
-              </div>
-            </div>
-
             <form id="profileForm" class="editor-form" onsubmit="return false;">
-              <div class="form-grid-3">
+              <div class="form-grid-2">
                 <div class="form-group">
                   <label for="inputMoney">Driver Money ($)</label>
                   <input type="number" id="inputMoney" class="custom-input" min="0" max="2147483648"
@@ -204,12 +186,6 @@
                     <span class="input-hint input-hint-muted">Max: 2,147,483,648 Cp</span>
                     <span class="input-hint" id="casinoFormattedHint">0 Cp</span>
                   </div>
-                </div>
-
-                <div class="form-group form-group-disabled">
-                  <label for="inputLevel">Overall Player Level <span class="badge" style="background: rgba(234, 179, 8, 0.15); color: var(--gold-primary); border: 1px solid var(--gold-primary); font-size: 0.72rem; padding: 0.15rem 0.5rem; margin-left: 0.5rem;">Work in Progress</span></label>
-                  <input type="text" id="inputLevel" class="custom-input input-readonly" disabled readonly value="--">
-                  <span class="input-hint" style="color: var(--text-dim);">Level editing is temporarily disabled while calculation logic is under investigation (Work in progress).</span>
                 </div>
               </div>
 
@@ -250,8 +226,379 @@
         </div>
       </section>
 
-      <!-- ==================== TAB 2: GARAGE EDITOR ==================== -->
+      <!-- ==================== TAB 2: PROGRESSION EDITOR ==================== -->
+      <section class="tab-pane" id="tab-progression">
+        <div class="pipeline-banner" id="progressionPipelineBanner">
+          <div class="banner-title">Player Progression & Level Engine (Level 0 - 73)</div>
+          <div class="banner-body">
+            Fulfill individual in-game objectives across 4 core skills and Casino Island, adjust milestone counters, or apply one-click global presets. A safety backup is automatically recorded to <strong>Backups/</strong> prior to saving.
+          </div>
+        </div>
+
+        <!-- Standby notice when no profile loaded -->
+        <div class="empty-state-banner" id="emptyProgressionBanner">
+          <div class="empty-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <div>Please select and load a player savegame profile from the selector above to view and edit progression.</div>
+        </div>
+
+        <div id="progressionContentWrap" style="display: none;">
+          <!-- Global Level Header Bar -->
+          <div class="prog-hero-bar">
+            <div class="prog-global-emblem">
+              <div class="prog-emblem-crest">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </div>
+              <div class="prog-emblem-details">
+                <div class="prog-emblem-title">GLOBAL LEVEL PROGRESSION</div>
+                <div class="prog-emblem-val-row">
+                  <span class="prog-emblem-val" id="progGlobalLevel">--</span>
+                  <span class="prog-emblem-divider">/</span>
+                  <span class="prog-emblem-max">73</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="prog-hero-actions">
+              <button class="btn btn-gold" id="btnProgMaxAll" title="Fulfill all base game and Casino Island objectives for Global Level 73">
+                Max All (Level 73)
+              </button>
+              <button class="btn btn-primary" id="btnProgMaxCasino" title="Fulfill all 146 Casino Island objectives for Casino Level 10 (Ace of Casino)">
+                Max Casino (Level 10)
+              </button>
+              <button class="btn btn-secondary" id="btnProgResetAll" title="Reset all progression objectives to zero">
+                Reset All
+              </button>
+            </div>
+          </div>
+
+          <!-- Progression Sub-Navigation Tabs -->
+          <div class="prog-subnav">
+            <button class="prog-subnav-btn active" data-subtab="overview" id="progSubtabOverview">Completion Overview</button>
+            <button class="prog-subnav-btn" data-subtab="competition" id="progSubtabCompetition">Competition</button>
+            <button class="prog-subnav-btn" data-subtab="discovery" id="progSubtabDiscovery">Discovery</button>
+            <button class="prog-subnav-btn" data-subtab="collection" id="progSubtabCollection">Collection</button>
+            <button class="prog-subnav-btn" data-subtab="social" id="progSubtabSocial">Social</button>
+            <button class="prog-subnav-btn prog-subnav-casino" data-subtab="casino" id="progSubtabCasino">Casino Island</button>
+          </div>
+
+          <!-- 1. SUB-PANEL: COMPLETION OVERVIEW -->
+          <div class="prog-subpanel active" id="progPanelOverview">
+            <div class="prog-overview-grid">
+              <!-- Driver Vital Status Card -->
+              <div class="glass-card prog-vital-card">
+                <div class="card-header">
+                  <h3>Driver Profile Status</h3>
+                  <span class="badge" id="progProfileStatusBadge">Active Save</span>
+                </div>
+                <div class="prog-vital-list">
+                  <div class="prog-vital-row">
+                    <span class="vital-lbl">Profile Name:</span>
+                    <span class="vital-val" id="progVitalProfileName">--</span>
+                  </div>
+                  <div class="prog-vital-row">
+                    <span class="vital-lbl">Calculated Level:</span>
+                    <span class="vital-val highlight-gold" id="progVitalGlobalLevel">--</span>
+                  </div>
+                  <div class="prog-vital-row">
+                    <span class="vital-lbl">Wallet Cash:</span>
+                    <span class="vital-val" id="progVitalMoney">--</span>
+                  </div>
+                  <div class="prog-vital-row">
+                    <span class="vital-lbl">Vehicles Owned:</span>
+                    <span class="vital-val" id="progVitalCars">--</span>
+                  </div>
+                  <div class="prog-vital-row">
+                    <span class="vital-lbl">Houses Owned:</span>
+                    <span class="vital-val" id="progVitalHouses">--</span>
+                  </div>
+                  <div class="prog-vital-row">
+                    <span class="vital-lbl">Club Rank:</span>
+                    <span class="vital-val" id="progVitalClubRank">--</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Base Skills Summary Progress Meters -->
+              <div class="glass-card prog-skills-summary-card">
+                <div class="card-header">
+                  <h3>Base Game Skills (60 Levels)</h3>
+                </div>
+                <div class="card-body">
+                  <!-- Competition Meter -->
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Competition</span>
+                      <span class="badge" id="compLevelBadge">Lvl 0 / 15</span>
+                      <span class="skill-meter-pts" id="compPointsVal">0 / 10,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill comp-fill" id="compProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+
+                  <!-- Discovery Meter -->
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Discovery</span>
+                      <span class="badge" id="discLevelBadge">Lvl 0 / 18</span>
+                      <span class="skill-meter-pts" id="discPointsVal">0 / 14,500 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill disc-fill" id="discProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+
+                  <!-- Collection Meter -->
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Collection</span>
+                      <span class="badge" id="collLevelBadge">Lvl 0 / 15</span>
+                      <span class="skill-meter-pts" id="collPointsVal">0 / 10,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill coll-fill" id="collProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+
+                  <!-- Social Meter -->
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Social</span>
+                      <span class="badge" id="socLevelBadge">Lvl 0 / 15</span>
+                      <span class="skill-meter-pts" id="socPointsVal">0 / 10,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill soc-fill" id="socProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Casino Island Summary Card -->
+              <div class="glass-card prog-casino-summary-card">
+                <div class="card-header">
+                  <div class="casino-header-title">
+                    <span class="casino-gem-bullet">&#9670;</span>
+                    <h3>Casino Island Progression (10 Levels)</h3>
+                  </div>
+                  <div class="casino-header-badges">
+                    <span class="badge badge-locked" id="casinoVipBadge">VIP Status</span>
+                    <span class="badge badge-locked" id="casinoAceBadge">Ace of Casino</span>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="casino-hero-stats">
+                    <div class="casino-hero-col">
+                      <span class="casino-stat-lbl">Casino Level</span>
+                      <span class="casino-stat-val highlight-gold" id="vitalCasinoLevel">Lvl 0 / 10</span>
+                    </div>
+                    <div class="casino-hero-col">
+                      <span class="casino-stat-lbl">Casino Points</span>
+                      <span class="casino-stat-val" id="vitalCasinoPoints">0 / 7,000 pts</span>
+                    </div>
+                    <div class="casino-hero-col">
+                      <span class="casino-stat-lbl">Distinction</span>
+                      <span class="casino-stat-val" id="vitalCasinoDistinction">Standard Member</span>
+                    </div>
+                  </div>
+
+                  <!-- Casino Skill Meters -->
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Competition <span class="sec-cnt-tag">6 Sec</span></span>
+                      <span class="badge" id="casCompLevelBadge">Lvl 0 / 4</span>
+                      <span class="skill-meter-pts" id="casCompPointsVal">0 / 4,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill cas-comp-fill" id="casCompProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Discovery <span class="sec-cnt-tag">3 Sec</span></span>
+                      <span class="badge" id="casDiscLevelBadge">Lvl 0 / 2</span>
+                      <span class="skill-meter-pts" id="casDiscPointsVal">0 / 1,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill cas-disc-fill" id="casDiscProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Collection <span class="sec-cnt-tag">3 Sec</span></span>
+                      <span class="badge" id="casCollLevelBadge">Lvl 0 / 2</span>
+                      <span class="skill-meter-pts" id="casCollPointsVal">0 / 1,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill cas-coll-fill" id="casCollProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+
+                  <div class="skill-meter-row">
+                    <div class="skill-meter-header">
+                      <span class="skill-meter-name">Social <span class="sec-cnt-tag">3 Sec</span></span>
+                      <span class="badge" id="casSocLevelBadge">Lvl 0 / 2</span>
+                      <span class="skill-meter-pts" id="casSocPointsVal">0 / 1,000 pts</span>
+                    </div>
+                    <div class="progress-bar-track">
+                      <div class="progress-bar-fill cas-soc-fill" id="casSocProgressBar" style="width: 0%;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Island Road Discovery Status Table -->
+            <div class="glass-card prog-roads-card">
+              <div class="card-header">
+                <h3>Island Road Discovery Status (6 Areas)</h3>
+              </div>
+              <div class="table-responsive">
+                <table class="prog-roads-table">
+                  <thead>
+                    <tr>
+                      <th>Area</th>
+                      <th>Island</th>
+                      <th>Roads Discovered</th>
+                      <th>Total Roads</th>
+                      <th>Percentage</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="roadsTableBody">
+                    <!-- Populated dynamically by app.js -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. SUB-PANEL: COMPETITION -->
+          <div class="prog-subpanel" id="progPanelCompetition">
+            <div class="skill-view-header">
+              <div class="skill-title-block">
+                <h2>Competition Progression</h2>
+                <div class="skill-sub-info" id="compHeaderPts">Level 0 / 15 • 0 / 10,000 pts</div>
+              </div>
+              <div class="skill-header-actions">
+                <button class="btn btn-sm btn-primary" id="btnMaxCompetition">Max Competition</button>
+                <button class="btn btn-sm btn-secondary" id="btnResetCompetition">Reset</button>
+              </div>
+            </div>
+            <div class="sections-container" id="competitionSections">
+              <!-- Dynamically populated by app.js -->
+            </div>
+          </div>
+
+          <!-- 3. SUB-PANEL: DISCOVERY -->
+          <div class="prog-subpanel" id="progPanelDiscovery">
+            <div class="skill-view-header">
+              <div class="skill-title-block">
+                <h2>Discovery Progression</h2>
+                <div class="skill-sub-info" id="discHeaderPts">Level 0 / 18 • 0 / 14,500 pts</div>
+              </div>
+              <div class="skill-header-actions">
+                <button class="btn btn-sm btn-primary" id="btnMaxDiscovery">Max Discovery</button>
+                <button class="btn btn-sm btn-secondary" id="btnResetDiscovery">Reset</button>
+              </div>
+            </div>
+            <div class="sections-container" id="discoverySections">
+              <!-- Dynamically populated by app.js -->
+            </div>
+          </div>
+
+          <!-- 4. SUB-PANEL: COLLECTION -->
+          <div class="prog-subpanel" id="progPanelCollection">
+            <div class="skill-view-header">
+              <div class="skill-title-block">
+                <h2>Collection Progression</h2>
+                <div class="skill-sub-info" id="collHeaderPts">Level 0 / 15 • 0 / 10,000 pts</div>
+              </div>
+              <div class="skill-header-actions">
+                <button class="btn btn-sm btn-primary" id="btnMaxCollection">Max Collection</button>
+                <button class="btn btn-sm btn-secondary" id="btnResetCollection">Reset</button>
+              </div>
+            </div>
+            <div class="sections-container" id="collectionSections">
+              <!-- Dynamically populated by app.js -->
+            </div>
+          </div>
+
+          <!-- 5. SUB-PANEL: SOCIAL -->
+          <div class="prog-subpanel" id="progPanelSocial">
+            <div class="skill-view-header">
+              <div class="skill-title-block">
+                <h2>Social Progression</h2>
+                <div class="skill-sub-info" id="socHeaderPts">Level 0 / 15 • 0 / 10,000 pts</div>
+              </div>
+              <div class="skill-header-actions">
+                <button class="btn btn-sm btn-primary" id="btnMaxSocial">Max Social</button>
+                <button class="btn btn-sm btn-secondary" id="btnResetSocial">Reset</button>
+              </div>
+            </div>
+            <div class="sections-container" id="socialSections">
+              <!-- Dynamically populated by app.js -->
+            </div>
+          </div>
+
+          <!-- 6. SUB-PANEL: CASINO ISLAND -->
+          <div class="prog-subpanel" id="progPanelCasino">
+            <div class="skill-view-header">
+              <div class="skill-title-block">
+                <h2>Casino Island Progression</h2>
+                <div class="skill-sub-info" id="casinoHeaderPts">Level 0 / 10 • 0 / 7,000 pts</div>
+              </div>
+              <div class="skill-header-actions">
+                <button class="btn btn-sm btn-gold" id="btnMaxCasinoSubpanel">Max Casino</button>
+                <button class="btn btn-sm btn-secondary" id="btnResetCasinoSubpanel">Reset</button>
+              </div>
+            </div>
+
+            <!-- Casino Subnav Filter Bar -->
+            <div class="casino-subnav">
+              <button class="subnav-pill active" data-casinofilter="all">All Casino Sections</button>
+              <button class="subnav-pill" data-casinofilter="competition">Competition (6)</button>
+              <button class="subnav-pill" data-casinofilter="discovery">Discovery (3)</button>
+              <button class="subnav-pill" data-casinofilter="collection">Collection (3)</button>
+              <button class="subnav-pill" data-casinofilter="social">Social (3)</button>
+            </div>
+
+            <div class="sections-container" id="casinoSectionsContainer">
+              <!-- Dynamically populated by app.js -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ==================== TAB 3: GARAGE EDITOR ==================== -->
       <section class="tab-pane" id="tab-garage">
+        <div class="residence-notice-banner">
+          <div class="residence-notice-icon">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div class="residence-notice-content">
+            <div class="residence-notice-title">Residence Names & Community Reporting Notice</div>
+            <div class="residence-notice-text">
+              Some residence names may be mismatched with in-game names due to differences between internal save identifiers and localized game assets. If any mismatch is found, please report it to our GitHub repository: <a href="https://github.com/Sivenesis/TDU2SaveFileToolkit" target="_blank" rel="noopener noreferrer">https://github.com/Sivenesis/TDU2SaveFileToolkit</a>
+            </div>
+          </div>
+        </div>
+
         <div class="pipeline-banner">
           <div class="banner-title">Garage Showroom Pipeline Notice</div>
           <div class="banner-body">
@@ -282,82 +629,111 @@
         </div>
       </section>
 
-      <!-- ==================== TAB 3: SAVE FILES MANIPULATION ==================== -->
+      <!-- ==================== TAB 4: BACKUP MANAGER ==================== -->
       <section class="tab-pane" id="tab-save-tools">
-        <div class="pipeline-banner">
-          <div class="banner-title">Save Container Engine (DES-CBC • Eden-SHA1)</div>
-          <div class="banner-body">
-            Unpack savegame containers to human-readable JSON files, pack modified JSON back into valid encrypted saves,
-            or manage your automatic timestamped backups.
+        <!-- Top Backup Control Bar -->
+        <div class="glass-card backup-control-card">
+          <div class="backup-control-left">
+            <div class="backup-title-row">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+              <h3>Savegame Backup Manager</h3>
+              <span class="badge" id="backupsTotalBadge">0 Backups</span>
+            </div>
+            <div class="backup-path-notice">
+              Safety snapshots are automatically created before every edit and organized under <code>Backups/&lt;Profile&gt;/</code>.
+            </div>
+          </div>
+          <div class="backup-control-right">
+            <button class="btn btn-gold" id="btnCreateManualBackup" title="Create an immediate full snapshot of your current active save">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+              </svg>
+              Create Timestamped Backup
+            </button>
+            <button class="btn btn-secondary" id="btnRefreshBackups" title="Refresh backup directory list">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              Refresh
+            </button>
           </div>
         </div>
 
-        <div class="tools-grid">
-          <!-- Save File Operations Card -->
-          <div class="glass-card tool-card">
-            <div class="card-header">
-              <h3>Save Operations</h3>
+        <!-- Full-Width Dedicated Backups Manager Table Card -->
+        <div class="glass-card backup-main-card">
+          <div class="backup-table-filter-bar">
+            <div class="filter-legend">
+              <span class="legend-dot dot-live"></span>
+              <span>Profile Snapshot History</span>
             </div>
-            <div class="tool-card-body">
-              <p class="section-desc">
-                Unpacking your save will decrypt <strong>DATA</strong>, <strong>KEYMAP</strong>, and
-                <strong>OPTIONS</strong> and place human-readable <code>.json</code> and raw <code>.dec</code> files
-                directly into the <strong><code>decrypt/</code></strong> folder in the Toolkit root directory.<br><br>
-                Once modified, click <strong>Pack from decrypt/ to Game-Ready Save</strong> to compile and re-encrypt
-                everything back into game-ready saves with authentic signatures and safety backups.
-              </p>
-              <div class="decrypt-folder-pill">
-                <span class="pill-label">Decrypted Files Destination:</span>
-                <code class="pill-path" id="decryptFolderPath">&lt;Toolkit_Root&gt;\decrypt\</code>
-              </div>
-              <div class="btn-cluster">
-                <button class="btn btn-secondary" id="btnUnpackSave">
-                  Unpack Save to decrypt/
-                </button>
-                <button class="btn btn-secondary" id="btnPackSave">
-                  Pack from decrypt/ to Game-Ready Save
-                </button>
-                <button class="btn btn-primary" id="btnCreateManualBackup">
-                  Create Timestamped Backup
-                </button>
-              </div>
+            <div class="backup-filter-input-wrap">
+              <input type="text" id="backupSearchInput" class="custom-input backup-search-input" placeholder="Filter backups by filename or operation..." />
             </div>
           </div>
 
-          <!-- Organized Backups Manager -->
-          <div class="glass-card tool-card backups-manager-card">
-            <div class="card-header">
-              <h3>Dedicated Backups Manager</h3>
-              <span class="badge" id="backupsTotalBadge">0 Backups</span>
+          <div class="backups-table-wrap">
+            <table class="backups-table" id="backupsTable">
+              <thead>
+                <tr>
+                  <th style="width: 100px;">Target</th>
+                  <th style="width: 220px;">Operation</th>
+                  <th>Backup Filename</th>
+                  <th style="width: 170px;">Date &amp; Time</th>
+                  <th style="width: 100px;">Size</th>
+                  <th style="width: 120px; text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="backupsTableBody">
+                <tr>
+                  <td colspan="6" class="table-empty">No backups recorded for this profile yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Advanced Save Container Operations (Secondary Card) -->
+        <div class="glass-card advanced-tools-card">
+          <div class="advanced-tools-header">
+            <div class="adv-title-wrap">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+                <line x1="6" y1="6" x2="6.01" y2="6"/>
+                <line x1="6" y1="18" x2="6.01" y2="18"/>
+              </svg>
+              <h3>Advanced Container Tools (DES-CBC &amp; Eden-SHA1)</h3>
             </div>
-            <div class="tool-card-body">
-              <p class="section-desc">
-                Safety backups are organized in the toolkit root under <code>Backups/&lt;Profile&gt;/</code>.
-              </p>
-              <div class="backups-table-wrap">
-                <table class="backups-table" id="backupsTable">
-                  <thead>
-                    <tr>
-                      <th>Filename</th>
-                      <th>Operation</th>
-                      <th>Date & Time</th>
-                      <th>Size</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody id="backupsTableBody">
-                    <tr>
-                      <td colspan="5" class="table-empty">No backups recorded for this profile yet.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <span class="adv-toggle-hint">Unpack to JSON &amp; Re-encrypt Containers</span>
+          </div>
+          <div class="advanced-tools-body">
+            <p class="section-desc">
+              Unpacking exports decrypted <strong>DATA</strong>, <strong>KEYMAP</strong>, and <strong>OPTIONS</strong> into human-readable <code>.json</code> and raw <code>.dec</code> files in the <code>decrypt/</code> directory. After custom manual editing, click <strong>Pack from decrypt/</strong> to compile and re-encrypt game-ready saves.
+            </p>
+            <div class="decrypt-folder-pill">
+              <span class="pill-label">Decrypted Files Destination:</span>
+              <code class="pill-path" id="decryptFolderPath">&lt;Toolkit_Root&gt;\decrypt\</code>
+            </div>
+            <div class="btn-cluster">
+              <button class="btn btn-secondary" id="btnUnpackSave">
+                Unpack Save to decrypt/
+              </button>
+              <button class="btn btn-secondary" id="btnPackSave">
+                Pack from decrypt/ to Game-Ready Save
+              </button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ==================== TAB 4: ONLINE MODE SWITCHER ==================== -->
+      <!-- ==================== TAB 5: ONLINE MODE SWITCHER ==================== -->
       <section class="tab-pane" id="tab-online-switch">
         <div class="pipeline-banner">
           <div class="banner-title">Online vs. Offline Profile Architecture & Progression Transfer</div>
@@ -522,7 +898,7 @@
     <!-- Footer -->
     <footer class="main-footer">
       <div class="footer-left">
-        <span>TDU2 Save File Toolkit v2.0.5 • 100% Self-Contained Offline Engine • Zero Dependencies</span>
+        <span>TDU2 Save File Toolkit v3.0.4 • 100% Self-Contained Offline Engine • Zero Dependencies</span>
       </div>
       <div class="footer-right">
         <span>DES-CBC • Eden-SHA1 Checksum • 359 Identified Vehicles • Online Mode Switcher</span>
@@ -609,6 +985,28 @@
 
         <div class="modal-actions">
           <button class="btn btn-secondary" id="catalogCancelBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vehicle Customization Modal (Colors, Trim/Interior, and Wheels/Rims) -->
+    <div class="modal-overlay" id="customizationModal">
+      <div class="modal-card modal-customization-card">
+        <div class="modal-header customization-modal-header">
+          <div>
+            <h4 id="customizationModalTitle">Vehicle Options & Customization</h4>
+            <div class="customization-modal-subtitle" id="customizationModalSubtitle">Target: Garage Slot #1 • Ferrari 458 Italia</div>
+          </div>
+          <button class="modal-close" id="customizationModalCloseBtn">&times;</button>
+        </div>
+
+        <div class="customization-modal-body" id="customizationModalBody">
+          <!-- Populated dynamically by app.js: 3 sections or fixed spec banner -->
+        </div>
+
+        <div class="modal-actions customization-modal-actions">
+          <button class="btn btn-secondary" id="customizationCancelBtn">Cancel</button>
+          <button class="btn btn-gold" id="customizationApplyBtn">Apply Customization</button>
         </div>
       </div>
     </div>

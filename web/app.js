@@ -1,5 +1,5 @@
 /**
- * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 2.0.5
+ * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 3.0.4
  * Modern client logic for 4-tab architecture, custom path management, and online mode switcher.
  */
 
@@ -15,6 +15,9 @@ const state = {
   garageIslandFilter: 'all',
   garageSearchQuery: '',
   swapTargetSlot: null,
+  progressionState: null,
+  activeProgSubtab: 'overview',
+  activeCasinoFilter: 'all',
   logs: []
 };
 
@@ -34,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
   setupEventListeners();
   setStandbyUI();
-  addLog("TDU2 Save File Toolkit v2.0.5 initialized. Scanning available save profiles...", "info");
+  addLog("TDU2 Save File Toolkit v3.0.4 initialized. Scanning available save profiles...", "info");
   fetchProfiles();
   fetchCatalog();
 });
@@ -79,7 +82,6 @@ function cacheElements() {
   el.inputCasinoPoints = document.getElementById('inputCasinoPoints');
   el.moneyFormattedHint = document.getElementById('moneyFormattedHint');
   el.casinoFormattedHint = document.getElementById('casinoFormattedHint');
-  el.inputLevel = document.getElementById('inputLevel');
   el.btnSaveProfile = document.getElementById('btnSaveProfile');
 
   // Casino Furniture (Tab 1)
@@ -105,6 +107,8 @@ function cacheElements() {
   el.decryptFolderPath = document.getElementById('decryptFolderPath');
   el.backupsTotalBadge = document.getElementById('backupsTotalBadge');
   el.backupsTableBody = document.getElementById('backupsTableBody');
+  el.btnRefreshBackups = document.getElementById('btnRefreshBackups');
+  el.backupSearchInput = document.getElementById('backupSearchInput');
 
   // Online Mode Switcher (Tab 4)
   el.onlineProfileCountBadge = document.getElementById('onlineProfileCountBadge');
@@ -147,6 +151,15 @@ function cacheElements() {
   el.catalogMatchCount = document.getElementById('catalogMatchCount');
   el.catalogList = document.getElementById('catalogList');
 
+  // Customization Modal
+  el.customizationModal = document.getElementById('customizationModal');
+  el.customizationModalTitle = document.getElementById('customizationModalTitle');
+  el.customizationModalSubtitle = document.getElementById('customizationModalSubtitle');
+  el.customizationModalCloseBtn = document.getElementById('customizationModalCloseBtn');
+  el.customizationCancelBtn = document.getElementById('customizationCancelBtn');
+  el.customizationApplyBtn = document.getElementById('customizationApplyBtn');
+  el.customizationModalBody = document.getElementById('customizationModalBody');
+
   el.toastContainer = document.getElementById('toastContainer');
 }
 
@@ -166,6 +179,24 @@ function setupTabs() {
 
       if (target === 'tab-online-switch') {
         renderOnlineSwitcherTab(state.profilesList);
+      } else if (target === 'tab-progression') {
+        renderProgressionTab();
+      } else if (target === 'tab-save-tools') {
+        fetchBackups();
+      } else if (target === 'tab-profile') {
+        if (state.activeProfile) {
+          if (el.emptyProfileBanner) {
+            el.emptyProfileBanner.classList.add('hidden');
+            el.emptyProfileBanner.style.display = 'none';
+          }
+          if (el.profileLoadedContent) el.profileLoadedContent.style.display = 'grid';
+        } else {
+          if (el.emptyProfileBanner) {
+            el.emptyProfileBanner.classList.remove('hidden');
+            el.emptyProfileBanner.style.display = '';
+          }
+          if (el.profileLoadedContent) el.profileLoadedContent.style.display = 'none';
+        }
       }
     });
   });
@@ -189,6 +220,8 @@ function setupEventListeners() {
   if (el.btnRefreshProfiles) {
     el.btnRefreshProfiles.addEventListener('click', fetchProfiles);
   }
+
+  initProgressionTabListeners();
 
   // Custom Savegame Path Modal Listeners
   if (el.btnOpenCustomPath) el.btnOpenCustomPath.addEventListener('click', openCustomPathModal);
@@ -258,10 +291,17 @@ function setupEventListeners() {
     });
   }
 
-  // Save Manipulation Operations (Tab 3)
+  // Save Manipulation Operations (Tab 4: Backup Manager)
   if (el.btnUnpackSave) el.btnUnpackSave.addEventListener('click', executeUnpackSave);
   if (el.btnPackSave) el.btnPackSave.addEventListener('click', executePackSave);
   if (el.btnCreateManualBackup) el.btnCreateManualBackup.addEventListener('click', executeManualBackup);
+  if (el.btnRefreshBackups) el.btnRefreshBackups.addEventListener('click', fetchBackups);
+  if (el.backupSearchInput) {
+    el.backupSearchInput.addEventListener('input', (e) => {
+      state.backupSearchQuery = e.target.value;
+      renderBackupsTable(state.currentBackupsList || []);
+    });
+  }
 
   // Diagnostic Console Controls
   if (el.consoleHeader) {
@@ -279,6 +319,11 @@ function setupEventListeners() {
   if (el.catalogModalCloseBtn) el.catalogModalCloseBtn.addEventListener('click', closeCatalogModal);
   if (el.catalogCancelBtn) el.catalogCancelBtn.addEventListener('click', closeCatalogModal);
 
+  // Customization Modal Listeners
+  if (el.customizationModalCloseBtn) el.customizationModalCloseBtn.addEventListener('click', closeCustomizationModal);
+  if (el.customizationCancelBtn) el.customizationCancelBtn.addEventListener('click', closeCustomizationModal);
+  if (el.customizationApplyBtn) el.customizationApplyBtn.addEventListener('click', executeCustomization);
+
   // Catalog Filters
   if (el.catalogSearchInput) {
     el.catalogSearchInput.addEventListener('input', renderCatalogList);
@@ -286,6 +331,22 @@ function setupEventListeners() {
   if (el.catalogBrandFilter) {
     el.catalogBrandFilter.addEventListener('change', renderCatalogList);
   }
+
+  // Global backdrop click to dismiss modals
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.classList.remove('active');
+      }
+    });
+  });
+
+  // Escape key to dismiss any active modal
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+    }
+  });
 }
 
 // --- DIAGNOSTIC LOGGER & CONSOLE ---
@@ -366,7 +427,10 @@ function showToast(message, type = 'info') {
 
 // --- STANDBY EMPTY STATE UI ---
 function setStandbyUI() {
-  if (el.emptyProfileBanner) el.emptyProfileBanner.classList.remove('hidden');
+  if (el.emptyProfileBanner) {
+    el.emptyProfileBanner.classList.remove('hidden');
+    el.emptyProfileBanner.style.display = '';
+  }
   if (el.profileLoadedContent) el.profileLoadedContent.style.display = 'none';
   if (el.topProfileName) el.topProfileName.textContent = 'None';
   if (el.profileStatusDot) el.profileStatusDot.classList.add('standby');
@@ -394,6 +458,14 @@ function setStandbyUI() {
       </div>
     `;
   }
+
+  const emptyProgBanner = document.getElementById('emptyProgressionBanner');
+  const progWrap = document.getElementById('progressionContentWrap');
+  if (emptyProgBanner) {
+    emptyProgBanner.classList.remove('hidden');
+    emptyProgBanner.style.display = '';
+  }
+  if (progWrap) progWrap.style.display = 'none';
 }
 
 // --- CUSTOM PATH MODAL & MANAGEMENT ---
@@ -558,8 +630,20 @@ function updateUI(summary) {
   if (!summary) return;
 
   // Unhide profile content and hide empty banner
-  if (el.emptyProfileBanner) el.emptyProfileBanner.classList.add('hidden');
+  if (el.emptyProfileBanner) {
+    el.emptyProfileBanner.classList.add('hidden');
+    el.emptyProfileBanner.style.display = 'none';
+  }
   if (el.profileLoadedContent) el.profileLoadedContent.style.display = 'grid';
+
+  const emptyProgBanner = document.getElementById('emptyProgressionBanner');
+  const progWrap = document.getElementById('progressionContentWrap');
+  if (emptyProgBanner) {
+    emptyProgBanner.classList.add('hidden');
+    emptyProgBanner.style.display = 'none';
+  }
+  if (progWrap) progWrap.style.display = 'block';
+  fetchProgressionState();
 
   // Header Status
   if (el.topProfileName) el.topProfileName.textContent = summary.driver_name;
@@ -598,8 +682,6 @@ function updateUI(summary) {
 
   if (el.inputCasinoPoints) el.inputCasinoPoints.value = summary.casino_points;
   if (el.casinoFormattedHint) el.casinoFormattedHint.textContent = `${summary.casino_points.toLocaleString()} Cp`;
-
-  if (el.inputLevel) el.inputLevel.value = `Level ${summary.overall_level}`;
 
   // Casino Furniture status
   const furn = summary.furniture || {};
@@ -728,7 +810,10 @@ function renderGarageShowroom() {
 
     let matchingCars = house.cars || [];
     if (q) {
-      const houseMatches = house.name.toLowerCase().includes(q) || house.island.toLowerCase().includes(q);
+      const houseMatches = house.name.toLowerCase().includes(q) ||
+        house.island.toLowerCase().includes(q) ||
+        (house.internal_display && house.internal_display.toLowerCase().includes(q)) ||
+        (house.spot_name && house.spot_name.toLowerCase().includes(q));
       matchingCars = house.cars.filter(c => {
         if (houseMatches) return true;
         const carStr = `${c.brand} ${c.name} ${c.model} ${c.version} ${c.archetype}`.toLowerCase();
@@ -741,11 +826,18 @@ function renderGarageShowroom() {
     const houseEl = document.createElement('div');
     houseEl.className = 'house-section';
 
+    const internalBadgeHtml = house.internal_display
+      ? `<span class="house-internal-id" title="Internal Residence ID & Spot Code">${escapeHtml(house.internal_display)}</span>`
+      : (house.spot_name ? `<span class="house-internal-id" title="Internal Spot Code">${escapeHtml(house.spot_name)}</span>` : '');
+
     houseEl.innerHTML = `
       <div class="house-header">
         <div class="house-title-wrap">
           <div>
-            <div class="house-name-text">${escapeHtml(house.name)}</div>
+            <div class="house-name-text">
+              <span>${escapeHtml(house.name)}</span>
+              ${internalBadgeHtml}
+            </div>
             <div class="house-meta-badges">
               <span class="badge-island badge-island-${house.island.toLowerCase()}">${escapeHtml(house.island)}</span>
               <span class="badge">Level ${house.level}</span>
@@ -819,6 +911,31 @@ function renderGarageShowroom() {
               <span class="tune-val">Lvl ${brakeLvl}</span>
             </div>
           </div>
+
+          <!-- Official Customization Badges -->
+          <div class="car-custom-badges">
+            <div class="custom-badge" title="Official Factory Paint: ${escapeHtml(car.color_name || 'Factory Stock')}">
+              <span class="custom-badge-icon">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+              </span>
+              <span class="custom-badge-cat">PAINT</span>
+              <span class="custom-badge-val">${escapeHtml(car.color_name || 'Factory Stock')}</span>
+            </div>
+            <div class="custom-badge" title="Official Factory Rims: ${escapeHtml(car.rim_name || 'Standard Wheels')}">
+              <span class="custom-badge-icon">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>
+              </span>
+              <span class="custom-badge-cat">RIMS</span>
+              <span class="custom-badge-val">${escapeHtml(car.rim_name || 'Standard Wheels')}</span>
+            </div>
+            <div class="custom-badge" title="Official Interior Trim: ${escapeHtml(car.interior_name || 'Standard Trim')}">
+              <span class="custom-badge-icon">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 18v3h16v-3"/><path d="M7 14h10"/><path d="M5 14a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2"/></svg>
+              </span>
+              <span class="custom-badge-cat">TRIM</span>
+              <span class="custom-badge-val">${escapeHtml(car.interior_name || 'Standard Trim')}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Tuning Drawer -->
@@ -858,6 +975,9 @@ function renderGarageShowroom() {
         <div class="car-card-footer">
           <span class="car-slot-tag">Slot #${car.index + 1}</span>
           <div class="car-card-actions">
+            <button class="btn btn-xs btn-secondary btn-customize-toggle" title="Customize exterior paint, wheels/rims, and interior trim">
+              Options
+            </button>
             <button class="btn btn-xs btn-secondary btn-tune-toggle">
               Tune
             </button>
@@ -915,11 +1035,19 @@ function renderGarageShowroom() {
         });
       }
 
+      // Customize Options Button
+      const customizeBtn = card.querySelector('.btn-customize-toggle');
+      if (customizeBtn) {
+        customizeBtn.addEventListener('click', () => {
+          openCustomizationModal(car, house.name, house.internal_display);
+        });
+      }
+
       // Swap Model Button
       const swapBtn = card.querySelector('.btn-swap-model');
       if (swapBtn) {
         swapBtn.addEventListener('click', () => {
-          openCatalogModal(car.index, car.name, house.name);
+          openCatalogModal(car.index, car.name, house.name, house.internal_display);
         });
       }
 
@@ -987,11 +1115,12 @@ function populateBrandFilter(cars) {
   });
 }
 
-function openCatalogModal(slotIndex, currentCarName, houseName) {
+function openCatalogModal(slotIndex, currentCarName, houseName, houseInternal) {
   state.swapTargetSlot = Number(slotIndex);
   if (el.catalogModalTitle) el.catalogModalTitle.textContent = `Swap Vehicle Model (Slot #${slotIndex + 1})`;
   if (el.catalogModalSubtitle) {
-    el.catalogModalSubtitle.textContent = `Target: Slot #${slotIndex + 1} • Currently: ${currentCarName} (${houseName})`;
+    const houseStr = houseInternal ? `${houseName || 'Garage'} • ${houseInternal}` : (houseName || 'Garage');
+    el.catalogModalSubtitle.textContent = `Target: Slot #${slotIndex + 1} • Currently: ${currentCarName} (${houseStr})`;
   }
   if (el.catalogSearchInput) el.catalogSearchInput.value = '';
   if (el.catalogBrandFilter) el.catalogBrandFilter.value = '';
@@ -1039,6 +1168,11 @@ function renderCatalogList() {
           <span>${car.top_speed ? Math.round(car.top_speed) + ' km/h' : '--'}</span>
           <span>${car.acceleration ? car.acceleration.toFixed(1) + 's' : '--'}</span>
         </div>
+        <div class="catalog-item-options-line">
+          ${car.has_options 
+            ? `<span class="opt-avail-badge">${car.colors_count} Colors • ${car.rims_count} Wheels</span>` 
+            : `<span class="opt-fixed-badge">Fixed Specification</span>`}
+        </div>
       </div>
       <button class="catalog-item-btn">
         Swap to this Vehicle
@@ -1077,6 +1211,307 @@ async function executeCatalogSwap(slotIndex, newArchetype, newCarName) {
   } catch (err) {
     addLog(`Car swap failed: ${err.message}`, "error");
     showToast(`Swap Error: ${err.message}`, "error");
+  }
+}
+
+// --- VEHICLE OPTIONS & CUSTOMIZATION MODAL ---
+function openCustomizationModal(car, houseName, houseInternal) {
+  state.customizeTargetCar = car;
+  if (!car) return;
+
+  const slotNum = car.index + 1;
+  const brandDisplay = car.brand ? `${car.brand} ` : '';
+  const fullName = `${brandDisplay}${car.name || ('Archetype #' + car.archetype)}`;
+
+  if (el.customizationModalTitle) {
+    el.customizationModalTitle.textContent = `Customize Vehicle Options (Slot #${slotNum})`;
+  }
+  if (el.customizationModalSubtitle) {
+    const houseStr = houseInternal ? `${houseName || 'Garage'} • ${houseInternal}` : (houseName || 'Garage');
+    el.customizationModalSubtitle.textContent = `${fullName} • Bay #${car.bay} (${houseStr})`;
+  }
+
+  // Locate car options from catalog
+  const carEntry = state.catalogCars.find(c => Number(c.archetype) === Number(car.archetype));
+  renderCustomizationBody(car, carEntry);
+
+  if (el.customizationModal) el.customizationModal.classList.add('active');
+}
+
+function closeCustomizationModal() {
+  if (el.customizationModal) el.customizationModal.classList.remove('active');
+  state.customizeTargetCar = null;
+}
+
+function renderCustomizationBody(car, carEntry) {
+  if (!el.customizationModalBody) return;
+  el.customizationModalBody.innerHTML = '';
+
+  const hasOptions = carEntry && carEntry.has_options;
+  const colors = (carEntry && carEntry.colors) || [];
+  const rims = (carEntry && carEntry.rims) || [];
+
+  if (!hasOptions && colors.length === 0 && rims.length === 0) {
+    // Fixed specification vehicle
+    el.customizationModalBody.innerHTML = `
+      <div class="fixed-spec-banner">
+        <div class="fixed-spec-header">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <h4>Factory Fixed Specification</h4>
+        </div>
+        <p>
+          This vehicle model (Archetype #${car.archetype}) is a fixed factory specification in Test Drive Unlimited 2 (e.g. Police cruiser, wreck reward, or unique race-spec vehicle) with no official dealership options.
+        </p>
+        <div class="fixed-spec-details">
+          <div class="spec-detail-item">
+            <span class="spec-detail-label">Exterior:</span>
+            <span class="spec-detail-val">Factory Standard Livery</span>
+          </div>
+          <div class="spec-detail-item">
+            <span class="spec-detail-label">Wheels:</span>
+            <span class="spec-detail-val">Factory Standard Wheels</span>
+          </div>
+          <div class="spec-detail-item">
+            <span class="spec-detail-label">Interior:</span>
+            <span class="spec-detail-val">Factory Standard Trim</span>
+          </div>
+        </div>
+      </div>
+    `;
+    if (el.customizationApplyBtn) el.customizationApplyBtn.style.display = 'none';
+    return;
+  }
+
+  if (el.customizationApplyBtn) el.customizationApplyBtn.style.display = 'inline-flex';
+
+  // Notice banner about trim and interior options being dependent on selected factory color
+  const noticeBanner = document.createElement('div');
+  noticeBanner.className = 'customization-notice-banner';
+  noticeBanner.innerHTML = `
+    <div class="notice-icon">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
+    </div>
+    <div class="notice-text">
+      <strong>Factory Compatibility Notice:</strong> Some trim and interior styling options are only available when certain official exterior colors are selected.
+    </div>
+  `;
+  el.customizationModalBody.appendChild(noticeBanner);
+
+  // Build 3 distinct sections
+  const container = document.createElement('div');
+  container.className = 'customization-sections-grid';
+
+  // Current active indices
+  const currentPaintIdx = Number(car.paint_indice || 0);
+  const currentRimIdx = Number(car.rim_indice || 0);
+  const currentInteriorIdx = Number(car.interior_indice || 0);
+
+  // SECTION 1: EXTERIOR COLOR
+  const sec1 = document.createElement('div');
+  sec1.className = 'custom-section-card';
+  sec1.innerHTML = `
+    <div class="custom-section-header">
+      <div class="sec-title-wrap">
+        <span class="sec-num-badge">1</span>
+        <div>
+          <span class="sec-title">Official Car Color</span>
+          <span class="sec-subtitle">Manufacturer Exterior Paint</span>
+        </div>
+      </div>
+      <span class="badge ${colors.length > 0 ? '' : 'badge-dim'}">${colors.length} Available</span>
+    </div>
+    <div class="custom-section-body">
+      ${colors.length > 0 ? `
+        <div class="form-group">
+          <label for="customPaintSelect">Select Official Color:</label>
+          <select id="customPaintSelect" class="custom-select">
+            ${colors.map(col => `
+              <option value="${col.index}" ${col.index === currentPaintIdx ? 'selected' : ''}>
+                ${escapeHtml(col.name)} ${col.price > 0 ? `(+$${col.price.toLocaleString()})` : '(Included)'}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+      ` : `
+        <div class="option-unavailable-box">
+          <span>No alternate factory colors available for this model (Factory Fixed).</span>
+        </div>
+      `}
+    </div>
+  `;
+  container.appendChild(sec1);
+
+  // SECTION 2: WHEELS / RIMS
+  const sec2 = document.createElement('div');
+  sec2.className = 'custom-section-card';
+  sec2.innerHTML = `
+    <div class="custom-section-header">
+      <div class="sec-title-wrap">
+        <span class="sec-num-badge">2</span>
+        <div>
+          <span class="sec-title">Official Wheels & Rims</span>
+          <span class="sec-subtitle">Manufacturer Wheel Specifications</span>
+        </div>
+      </div>
+      <span class="badge ${rims.length > 0 ? '' : 'badge-dim'}">${rims.length} Available</span>
+    </div>
+    <div class="custom-section-body">
+      ${rims.length > 0 ? `
+        <div class="form-group">
+          <label for="customRimSelect">Select Official Wheels:</label>
+          <select id="customRimSelect" class="custom-select">
+            ${rims.map(r => {
+              const diaStr = r.diameter_front ? `${r.diameter_front}"` : '';
+              return `
+                <option value="${r.index}" ${r.index === currentRimIdx ? 'selected' : ''}>
+                  ${escapeHtml(r.name)} ${diaStr ? `(${diaStr})` : ''} ${r.price > 0 ? `(+$${r.price.toLocaleString()})` : '(Standard)'}
+                </option>
+              `;
+            }).join('')}
+          </select>
+        </div>
+      ` : `
+        <div class="option-unavailable-box">
+          <span>Standard manufacturer wheels (Factory Fixed).</span>
+        </div>
+      `}
+    </div>
+  `;
+  container.appendChild(sec2);
+
+  // SECTION 3: INTERIOR / TRIM COLOR
+  const sec3 = document.createElement('div');
+  sec3.className = 'custom-section-card';
+  sec3.innerHTML = `
+    <div class="custom-section-header">
+      <div class="sec-title-wrap">
+        <span class="sec-num-badge">3</span>
+        <div>
+          <span class="sec-title">Official Trim & Interior</span>
+          <span class="sec-subtitle">Upholstery & Dashboard Styling</span>
+        </div>
+      </div>
+      <span class="badge" id="interiorCountBadge">-- Available</span>
+    </div>
+    <div class="custom-section-body" id="interiorSectionBody">
+      <!-- Populated dynamically based on selected color -->
+    </div>
+  `;
+  container.appendChild(sec3);
+
+  el.customizationModalBody.appendChild(container);
+
+  // Dynamic Interior Options Update Function
+  function refreshInteriors(selectedColorIdx, targetIntIdx = null) {
+    const intBody = document.getElementById('interiorSectionBody');
+    const countBadge = document.getElementById('interiorCountBadge');
+    if (!intBody) return;
+
+    let availableInts = [];
+    if (colors.length > 0) {
+      const activeColor = colors.find(c => c.index === Number(selectedColorIdx)) || colors[0];
+      availableInts = (activeColor && activeColor.interiors) || [];
+    }
+
+    if (countBadge) countBadge.textContent = `${availableInts.length} Available`;
+
+    if (!availableInts.length) {
+      intBody.innerHTML = `
+        <div class="option-unavailable-box">
+          <span>Standard factory interior (No alternate trim for this color).</span>
+        </div>
+      `;
+      return;
+    }
+
+    const currentMatch = targetIntIdx !== null ? targetIntIdx : currentInteriorIdx;
+    let selectedExists = availableInts.some(i => i.index === currentMatch);
+    const chosenIdx = selectedExists ? currentMatch : availableInts[0].index;
+
+    intBody.innerHTML = `
+      <div class="form-group">
+        <label for="customInteriorSelect">Select Interior Trim:</label>
+        <select id="customInteriorSelect" class="custom-select">
+          ${availableInts.map(i => `
+            <option value="${i.index}" ${i.index === chosenIdx ? 'selected' : ''}>
+              ${escapeHtml(i.name)} ${i.price > 0 ? `(+$${i.price.toLocaleString()})` : '(Included)'}
+            </option>
+          `).join('')}
+        </select>
+      </div>
+    `;
+  }
+
+  // Initial population of interiors
+  const initialPaint = colors.length > 0 ? currentPaintIdx : 0;
+  refreshInteriors(initialPaint, currentInteriorIdx);
+
+  // Color change listener to re-populate compatible interiors
+  const paintSelect = document.getElementById('customPaintSelect');
+  if (paintSelect) {
+    paintSelect.addEventListener('change', (e) => {
+      refreshInteriors(Number(e.target.value), null);
+    });
+  }
+}
+
+async function executeCustomization() {
+  const car = state.customizeTargetCar;
+  if (!car) return;
+
+  const paintSelect = document.getElementById('customPaintSelect');
+  const rimSelect = document.getElementById('customRimSelect');
+  const interiorSelect = document.getElementById('customInteriorSelect');
+
+  const paintIdx = paintSelect ? Number(paintSelect.value) : Number(car.paint_indice || 0);
+  const rimIdx = rimSelect ? Number(rimSelect.value) : Number(car.rim_indice || 0);
+  const interiorIdx = interiorSelect ? Number(interiorSelect.value) : Number(car.interior_indice || 0);
+
+  if (el.customizationApplyBtn) {
+    el.customizationApplyBtn.disabled = true;
+    el.customizationApplyBtn.textContent = 'Applying...';
+  }
+
+  addLog(`Applying customization to Slot #${car.index + 1} (${car.name}): Paint #${paintIdx}, Rim #${rimIdx}, Interior #${interiorIdx}...`, "info");
+
+  try {
+    const res = await fetch('/api/customize-car', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        slot: car.index,
+        paint_indice: paintIdx,
+        rim_indice: rimIdx,
+        interior_indice: interiorIdx
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    state.saveSummary = data.summary;
+    updateUI(state.saveSummary);
+
+    addLog(`[CUSTOMIZATION SUCCESS] ${data.message}`, "success");
+    if (data.backup_path) {
+      addLog(`Safety backup created: ${data.backup_path}`, "info");
+    }
+    showToast(`Customization applied to Slot #${car.index + 1}!`, "success");
+    closeCustomizationModal();
+  } catch (err) {
+    addLog(`Customization failed: ${err.message}`, "error");
+    showToast(`Customization Error: ${err.message}`, "error");
+  } finally {
+    if (el.customizationApplyBtn) {
+      el.customizationApplyBtn.disabled = false;
+      el.customizationApplyBtn.textContent = 'Apply Customization';
+    }
   }
 }
 
@@ -1178,24 +1613,68 @@ async function executeManualBackup() {
   }
 }
 
+async function fetchBackups() {
+  if (!state.activeProfile) return;
+  try {
+    const res = await fetch('/api/backups', { headers: getAuthHeaders() });
+    const data = await res.json();
+    if (data.success && data.backups) {
+      if (el.backupsTotalBadge) el.backupsTotalBadge.textContent = `${data.count} Backups`;
+      if (el.topBackupCount) el.topBackupCount.textContent = data.count;
+      state.currentBackupsList = data.backups;
+      renderBackupsTable(data.backups);
+    }
+  } catch (err) {
+    console.error("Failed fetching backups:", err);
+  }
+}
+
 function renderBackupsTable(backups) {
   if (!el.backupsTableBody) return;
   el.backupsTableBody.innerHTML = '';
 
+  state.currentBackupsList = backups || [];
+
   if (!backups || !backups.length) {
-    el.backupsTableBody.innerHTML = '<tr><td colspan="5" class="table-empty">No backups recorded for this profile yet.</td></tr>';
+    el.backupsTableBody.innerHTML = '<tr><td colspan="6" class="table-empty">No backups recorded for this profile yet. Click &quot;Create Timestamped Backup&quot; to make one.</td></tr>';
     return;
   }
 
-  backups.forEach(b => {
+  const query = (state.backupSearchQuery || '').toLowerCase().trim();
+  const filtered = query
+    ? backups.filter(b => b.filename.toLowerCase().includes(query) || (b.operation || '').toLowerCase().includes(query))
+    : backups;
+
+  if (!filtered.length) {
+    el.backupsTableBody.innerHTML = '<tr><td colspan="6" class="table-empty">No backups matching filter query.</td></tr>';
+    return;
+  }
+
+  filtered.forEach(b => {
     const tr = document.createElement('tr');
+
+    let targetType = 'DATA';
+    let targetClass = 'badge-target-data';
+    const fnUpper = b.filename.toUpperCase();
+    if (fnUpper.includes('_OPTIONS_') || fnUpper.includes('OPTIONS')) {
+      targetType = 'OPTIONS';
+      targetClass = 'badge-target-options';
+    } else if (fnUpper.includes('_KEYMAP_') || fnUpper.includes('KEYMAP')) {
+      targetType = 'KEYMAP';
+      targetClass = 'badge-target-keymap';
+    }
+
+    let opDisplay = b.operation || 'AutoBackup';
+    opDisplay = opDisplay.replace(/_/g, ' ');
+
     tr.innerHTML = `
-      <td>${escapeHtml(b.filename)}</td>
-      <td><span class="op-tag">${escapeHtml(b.operation)}</span></td>
-      <td>${escapeHtml(b.timestamp)}</td>
-      <td>${escapeHtml(b.size_formatted)}</td>
-      <td>
-        <button class="btn btn-xs btn-secondary btn-restore-row">Restore</button>
+      <td><span class="badge ${targetClass}">${targetType}</span></td>
+      <td><span class="op-tag">${escapeHtml(opDisplay)}</span></td>
+      <td class="backup-filename-cell"><code>${escapeHtml(b.filename)}</code></td>
+      <td class="backup-date-cell">${escapeHtml(b.timestamp)}</td>
+      <td class="backup-size-cell">${escapeHtml(b.size_formatted)}</td>
+      <td class="backup-action-cell">
+        <button class="btn btn-xs btn-primary btn-restore-row" title="Restore save from this backup">Restore</button>
       </td>
     `;
 
@@ -1508,5 +1987,631 @@ function handleTab1ToggleOnline() {
       executeSwitchProfile(state.activeProfile, targetOnline);
     }
   );
+}
+
+
+// ==============================================================================
+// TAB 2: PROGRESSION EDITOR LOGIC & RENDERING
+// ==============================================================================
+
+function initProgressionTabListeners() {
+  // Sub-Navigation Tabs
+  const subnavBtns = document.querySelectorAll('.prog-subnav-btn');
+  subnavBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      subnavBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const subtabKey = btn.dataset.subtab || 'overview';
+      state.activeProgSubtab = subtabKey;
+
+      document.querySelectorAll('.prog-subpanel').forEach(p => p.classList.remove('active'));
+      const targetPanelId = `progPanel${subtabKey.charAt(0).toUpperCase() + subtabKey.slice(1)}`;
+      const targetPanel = document.getElementById(targetPanelId);
+      if (targetPanel) {
+        targetPanel.classList.add('active');
+      }
+
+      renderProgressionTab();
+    });
+  });
+
+  // Casino Subnav Filter Pills
+  const casinoFilterPills = document.querySelectorAll('.casino-subnav .subnav-pill');
+  casinoFilterPills.forEach(pill => {
+    pill.addEventListener('click', () => {
+      casinoFilterPills.forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.activeCasinoFilter = pill.dataset.casinofilter || 'all';
+      renderProgressionCasinoTab();
+    });
+  });
+
+  // Global Presets
+  const btnMaxAll = document.getElementById('btnProgMaxAll');
+  if (btnMaxAll) {
+    btnMaxAll.addEventListener('click', () => {
+      showConfirmModal(
+        "Fulfill All Objectives (Global Level 73)?",
+        "This will unlock all 60 base game levels across Competition, Discovery, Collection, and Social, plus all 146 Casino Island objectives for Casino Level 10 (Ace of Casino).<br><br>A safety backup will be created before saving.",
+        () => applyProgressionPreset('max_all')
+      );
+    });
+  }
+
+  const btnMaxCasino = document.getElementById('btnProgMaxCasino');
+  if (btnMaxCasino) {
+    btnMaxCasino.addEventListener('click', () => {
+      showConfirmModal(
+        "Fulfill All Casino Island Objectives?",
+        "This will complete all 15 casino sections, reach Casino Level 10, and grant VIP & Ace of Casino status.<br><br>A safety backup will be created before saving.",
+        () => applyProgressionPreset('max_casino')
+      );
+    });
+  }
+
+  const btnResetAll = document.getElementById('btnProgResetAll');
+  if (btnResetAll) {
+    btnResetAll.addEventListener('click', () => {
+      showConfirmModal(
+        "Reset All Progression Objectives?",
+        "This will reset all progress scores and objective achievements back to baseline (Level 0).<br><br>A safety backup will be created before saving.",
+        () => applyProgressionPreset('reset_all')
+      );
+    });
+  }
+
+  // Skill Preset Buttons
+  const mapSkillBtn = (btnId, type, skill) => {
+    const b = document.getElementById(btnId);
+    if (b) {
+      b.addEventListener('click', () => applyProgressionPreset(type, skill));
+    }
+  };
+
+  mapSkillBtn('btnMaxCompetition', 'max_skill', 'competition');
+  mapSkillBtn('btnResetCompetition', 'reset_skill', 'competition');
+  mapSkillBtn('btnMaxDiscovery', 'max_skill', 'discovery');
+  mapSkillBtn('btnResetDiscovery', 'reset_skill', 'discovery');
+  mapSkillBtn('btnMaxCollection', 'max_skill', 'collection');
+  mapSkillBtn('btnResetCollection', 'reset_skill', 'collection');
+  mapSkillBtn('btnMaxSocial', 'max_skill', 'social');
+  mapSkillBtn('btnResetSocial', 'reset_skill', 'social');
+
+  // Casino Subpanel Preset Buttons
+  const btnMaxCasSub = document.getElementById('btnMaxCasinoSubpanel');
+  if (btnMaxCasSub) {
+    btnMaxCasSub.addEventListener('click', () => applyProgressionPreset('max_casino'));
+  }
+  const btnResetCasSub = document.getElementById('btnResetCasinoSubpanel');
+  if (btnResetCasSub) {
+    btnResetCasSub.addEventListener('click', () => applyProgressionPreset('reset_casino'));
+  }
+}
+
+async function fetchProgressionState() {
+  if (!state.activeProfile) return;
+  try {
+    const res = await fetch('/api/progression/state', {
+      headers: getAuthHeaders()
+    });
+    const data = await res.json();
+    if (data.success && data.state) {
+      state.progressionState = data.state;
+      renderProgressionTab();
+    }
+  } catch (err) {
+    console.error("Error fetching progression state:", err);
+  }
+}
+
+async function setProgressionObjective(objId, val) {
+  try {
+    const res = await fetch('/api/progression/set-objective', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ id: objId, value: val })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    state.progressionState = data.state;
+    renderProgressionTab();
+    showToast(`Objective updated: ${objId}`, "success");
+  } catch (err) {
+    showToast(`Failed updating objective: ${err.message}`, "error");
+    fetchProgressionState();
+  }
+}
+
+async function applyProgressionPreset(type, target = null) {
+  addLog(`Applying progression preset '${type}' ${target ? `for ${target}` : ''}...`, "info");
+  try {
+    const res = await fetch('/api/progression/preset', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ type, target })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    state.progressionState = data.state;
+    renderProgressionTab();
+
+    // If global level updated, synchronize top driver badge
+    if (data.state && data.state.overview && el.driverBadge && state.saveSummary) {
+      el.driverBadge.textContent = `Driver: ${state.saveSummary.driver_name} (Level ${data.state.overview.global_level})`;
+    }
+
+    addLog(data.message || "Preset applied successfully.", "success");
+    showToast(data.message || "Preset applied successfully.", "success");
+  } catch (err) {
+    addLog(`Preset failed: ${err.message}`, "error");
+    showToast(`Preset Error: ${err.message}`, "error");
+  }
+}
+
+function renderProgressionTab() {
+  const emptyProgBanner = document.getElementById('emptyProgressionBanner');
+  const progWrap = document.getElementById('progressionContentWrap');
+
+  if (!state.activeProfile || !state.progressionState) {
+    if (emptyProgBanner) {
+      emptyProgBanner.classList.remove('hidden');
+      emptyProgBanner.style.display = '';
+    }
+    if (progWrap) progWrap.style.display = 'none';
+    return;
+  }
+
+  if (emptyProgBanner) {
+    emptyProgBanner.classList.add('hidden');
+    emptyProgBanner.style.display = 'none';
+  }
+  if (progWrap) progWrap.style.display = 'block';
+
+  const st = state.progressionState;
+  const ov = st.overview;
+  if (!ov) return;
+
+  // Header Global Level Hero
+  const progGlobalLevel = document.getElementById('progGlobalLevel');
+  if (progGlobalLevel) {
+    progGlobalLevel.textContent = ov.global_level;
+  }
+
+  // Active Subpanel Rendering
+  const currentSubtab = state.activeProgSubtab || 'overview';
+  if (currentSubtab === 'overview') {
+    renderProgressionOverview();
+  } else if (currentSubtab === 'competition') {
+    renderProgressionSkillTab('competition', 'competitionSections', 'compHeaderPts');
+  } else if (currentSubtab === 'discovery') {
+    renderProgressionSkillTab('discovery', 'discoverySections', 'discHeaderPts');
+  } else if (currentSubtab === 'collection') {
+    renderProgressionSkillTab('collection', 'collectionSections', 'collHeaderPts');
+  } else if (currentSubtab === 'social') {
+    renderProgressionSkillTab('social', 'socialSections', 'socHeaderPts');
+  } else if (currentSubtab === 'casino') {
+    renderProgressionCasinoTab();
+  }
+}
+
+function renderProgressionOverview() {
+  const ov = state.progressionState?.overview;
+  if (!ov) return;
+
+  const setTxt = (id, val) => {
+    const e = document.getElementById(id);
+    if (e) e.textContent = val;
+  };
+
+  setTxt('progVitalProfileName', ov.profile_name || state.activeProfile || '--');
+  setTxt('progVitalGlobalLevel', `Level ${ov.global_level}`);
+  setTxt('progVitalMoney', `$${Number(ov.money || 0).toLocaleString()}`);
+  setTxt('progVitalCars', ov.cars_owned || 0);
+  setTxt('progVitalHouses', ov.houses_owned || 0);
+  setTxt('progVitalClubRank', `Rank ${ov.club_rank || 0}`);
+
+  // Base Skills Summary Meters
+  const skills = ov.skills;
+  if (skills) {
+    // Competition
+    const comp = skills.competition;
+    setTxt('compLevelBadge', `Lvl ${comp.level} / ${comp.max_level}`);
+    setTxt('compPointsVal', `${comp.points.toLocaleString()} / ${comp.max_points.toLocaleString()} pts`);
+    const compBar = document.getElementById('compProgressBar');
+    if (compBar) compBar.style.width = `${comp.percent}%`;
+
+    // Discovery
+    const disc = skills.discovery;
+    setTxt('discLevelBadge', `Lvl ${disc.level} / ${disc.max_level}`);
+    setTxt('discPointsVal', `${disc.points.toLocaleString()} / ${disc.max_points.toLocaleString()} pts`);
+    const discBar = document.getElementById('discProgressBar');
+    if (discBar) discBar.style.width = `${disc.percent}%`;
+
+    // Collection
+    const coll = skills.collection;
+    setTxt('collLevelBadge', `Lvl ${coll.level} / ${coll.max_level}`);
+    setTxt('collPointsVal', `${coll.points.toLocaleString()} / ${coll.max_points.toLocaleString()} pts`);
+    const collBar = document.getElementById('collProgressBar');
+    if (collBar) collBar.style.width = `${coll.percent}%`;
+
+    // Social
+    const soc = skills.social;
+    setTxt('socLevelBadge', `Lvl ${soc.level} / ${soc.max_level}`);
+    setTxt('socPointsVal', `${soc.points.toLocaleString()} / ${soc.max_points.toLocaleString()} pts`);
+    const socBar = document.getElementById('socProgressBar');
+    if (socBar) socBar.style.width = `${soc.percent}%`;
+  }
+
+  // Casino Island Summary
+  const casSum = ov.casino_summary;
+  if (casSum) {
+    setTxt('vitalCasinoLevel', `Lvl ${casSum.level} / ${casSum.max_level}`);
+    setTxt('vitalCasinoPoints', `${casSum.points.toLocaleString()} / ${casSum.max_points.toLocaleString()} (${casSum.percent}%)`);
+
+    const distEl = document.getElementById('vitalCasinoDistinction');
+    if (distEl) {
+      if (casSum.is_ace) distEl.textContent = 'Ace of Casino';
+      else if (casSum.is_vip) distEl.textContent = 'VIP Member';
+      else distEl.textContent = 'Standard Member';
+    }
+
+    const vipBadge = document.getElementById('casinoVipBadge');
+    if (vipBadge) {
+      vipBadge.className = `badge ${casSum.is_vip ? 'badge-vip active' : 'badge-locked'}`;
+      vipBadge.textContent = casSum.is_vip ? 'VIP Active' : 'VIP Locked';
+    }
+
+    const aceBadge = document.getElementById('casinoAceBadge');
+    if (aceBadge) {
+      aceBadge.className = `badge ${casSum.is_ace ? 'badge-ace active' : 'badge-locked'}`;
+      aceBadge.textContent = casSum.is_ace ? 'Ace Active' : 'Ace Locked';
+    }
+  }
+
+  const casSkills = ov.casino_skills;
+  if (casSkills) {
+    if (casSkills.competition) {
+      const c = casSkills.competition;
+      setTxt('casCompLevelBadge', `Lvl ${c.level} / ${c.max_level}`);
+      setTxt('casCompPointsVal', `${c.points.toLocaleString()} / ${c.max_points.toLocaleString()} pts`);
+      const bar = document.getElementById('casCompProgressBar');
+      if (bar) bar.style.width = `${c.percent}%`;
+    }
+    if (casSkills.discovery) {
+      const d = casSkills.discovery;
+      setTxt('casDiscLevelBadge', `Lvl ${d.level} / ${d.max_level}`);
+      setTxt('casDiscPointsVal', `${d.points.toLocaleString()} / ${d.max_points.toLocaleString()} pts`);
+      const bar = document.getElementById('casDiscProgressBar');
+      if (bar) bar.style.width = `${d.percent}%`;
+    }
+    if (casSkills.collection) {
+      const c = casSkills.collection;
+      setTxt('casCollLevelBadge', `Lvl ${c.level} / ${c.max_level}`);
+      setTxt('casCollPointsVal', `${c.points.toLocaleString()} / ${c.max_points.toLocaleString()} pts`);
+      const bar = document.getElementById('casCollProgressBar');
+      if (bar) bar.style.width = `${c.percent}%`;
+    }
+    if (casSkills.social) {
+      const s = casSkills.social;
+      setTxt('casSocLevelBadge', `Lvl ${s.level} / ${s.max_level}`);
+      setTxt('casSocPointsVal', `${s.points.toLocaleString()} / ${s.max_points.toLocaleString()} pts`);
+      const bar = document.getElementById('casSocProgressBar');
+      if (bar) bar.style.width = `${s.percent}%`;
+    }
+  }
+
+  // Roads Discovery Table
+  renderRoadsTable(ov.roads_summary);
+}
+
+function renderRoadsTable(roadsSummary) {
+  const tbody = document.getElementById('roadsTableBody');
+  if (!tbody || !roadsSummary) return;
+
+  const areaNames = [
+    { area: "Ibiza Area 1", island: "Ibiza" },
+    { area: "Ibiza Area 2", island: "Ibiza" },
+    { area: "Hawaii Area 1", island: "Hawaii" },
+    { area: "Hawaii Area 2", island: "Hawaii" },
+    { area: "Hawaii Area 3", island: "Hawaii" },
+    { area: "Hawaii Area 4", island: "Hawaii" },
+  ];
+
+  tbody.innerHTML = '';
+  const unlocked = roadsSummary.unlocked || [];
+  const totals = roadsSummary.total || [];
+
+  areaNames.forEach((item, idx) => {
+    const u = unlocked[idx] || 0;
+    const t = totals[idx] || 0;
+    const pct = t > 0 ? ((u / t) * 100).toFixed(1) : 0;
+    const isFull = Number(pct) >= 100;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(item.area)}</strong></td>
+      <td>${escapeHtml(item.island)}</td>
+      <td>${u}</td>
+      <td>${t}</td>
+      <td><strong>${pct}%</strong></td>
+      <td>
+        <span class="badge ${isFull ? 'badge-online' : 'badge-dim'}">
+          ${isFull ? '100% Complete' : 'In Progress'}
+        </span>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderProgressionSkillTab(skillKey, containerId, headerInfoId) {
+  const st = state.progressionState;
+  if (!st || !st.skills) return;
+
+  const skillData = st.skills[skillKey];
+  const container = document.getElementById(containerId);
+  const headerInfo = document.getElementById(headerInfoId);
+  if (!skillData || !container) return;
+
+  const skillMeta = st.overview?.skills?.[skillKey];
+  if (skillMeta && headerInfo) {
+    headerInfo.textContent = `Level ${skillMeta.level} / ${skillMeta.max_level} • ${skillMeta.points.toLocaleString()} / ${skillMeta.max_points.toLocaleString()} pts (${skillMeta.percent}%)`;
+  }
+
+  container.innerHTML = '';
+
+  Object.values(skillData.sections || {}).forEach(sec => {
+    const secBox = document.createElement('div');
+    secBox.className = 'section-box';
+
+    let secEarned = 0;
+    let secTotal = 0;
+    (sec.objectives || []).forEach(o => {
+      secEarned += o.earned_points || 0;
+      secTotal += o.points || 0;
+    });
+
+    const secHeader = document.createElement('div');
+    secHeader.className = 'section-header';
+    secHeader.innerHTML = `
+      <div class="sec-title-wrap">
+        <span class="section-title">${escapeHtml(sec.name)}</span>
+        <span class="section-summary-tag">${secEarned.toLocaleString()} / ${secTotal.toLocaleString()} pts</span>
+      </div>
+      <div class="section-actions">
+        <button class="btn btn-xs btn-primary btn-max-sec">Max Section</button>
+        <button class="btn btn-xs btn-secondary btn-reset-sec">Reset</button>
+      </div>
+    `;
+
+    secHeader.querySelector('.btn-max-sec').addEventListener('click', () => {
+      applyProgressionPreset('max_section', sec.id);
+    });
+    secHeader.querySelector('.btn-reset-sec').addEventListener('click', () => {
+      applyProgressionPreset('reset_section', sec.id);
+    });
+
+    const secBody = document.createElement('div');
+    secBody.className = 'section-body';
+
+    const grid = document.createElement('div');
+    grid.className = 'objectives-grid';
+
+    (sec.objectives || []).forEach(obj => {
+      const item = document.createElement('div');
+      item.className = `objective-item ${obj.completed ? 'completed' : ''}`;
+
+      const left = document.createElement('div');
+      left.className = 'objective-left';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'objective-checkbox';
+      cb.checked = Boolean(obj.completed);
+      cb.addEventListener('change', (e) => {
+        setProgressionObjective(obj.id, e.target.checked);
+      });
+
+      const info = document.createElement('div');
+      info.className = 'objective-info';
+
+      const name = document.createElement('span');
+      name.className = 'objective-name';
+      name.textContent = obj.name;
+
+      const tags = document.createElement('div');
+      tags.className = 'objective-tags';
+      tags.innerHTML = `
+        <span class="tag-island">${escapeHtml(obj.island || 'Global')}</span>
+        <span class="tag-points">+${obj.points} pts</span>
+      `;
+
+      info.appendChild(name);
+      info.appendChild(tags);
+
+      left.appendChild(cb);
+      left.appendChild(info);
+
+      const right = document.createElement('div');
+      right.className = 'objective-right';
+
+      if (obj.type === 'counter' || obj.type === 'counter_linear') {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'counter-input';
+        input.value = obj.current_value;
+        input.min = 0;
+        input.max = Math.max(obj.target_value * 2, 100);
+        input.addEventListener('change', (e) => {
+          setProgressionObjective(obj.id, parseInt(e.target.value) || 0);
+        });
+        right.appendChild(input);
+      }
+
+      item.appendChild(left);
+      item.appendChild(right);
+      grid.appendChild(item);
+    });
+
+    secBody.appendChild(grid);
+    secBox.appendChild(secHeader);
+    secBox.appendChild(secBody);
+    container.appendChild(secBox);
+  });
+}
+
+function renderProgressionCasinoTab() {
+  const st = state.progressionState;
+  if (!st || !st.casino_skills) return;
+
+  const casinoSkills = st.casino_skills;
+  const container = document.getElementById('casinoSectionsContainer');
+  const headerInfo = document.getElementById('casinoHeaderPts');
+  if (!container) return;
+
+  const casSum = st.overview?.casino_summary;
+  if (casSum && headerInfo) {
+    headerInfo.textContent = `Level ${casSum.level} / ${casSum.max_level} • ${casSum.points.toLocaleString()} / ${casSum.max_points.toLocaleString()} pts (${casSum.percent}%)`;
+  }
+
+  container.innerHTML = '';
+  const filter = state.activeCasinoFilter || 'all';
+
+  Object.entries(casinoSkills).forEach(([skillKey, skillData]) => {
+    if (filter !== 'all' && filter !== skillKey) {
+      return;
+    }
+
+    const skillGroup = document.createElement('div');
+    skillGroup.className = 'casino-skill-group';
+
+    const skillMeta = st.overview?.casino_skills?.[skillKey];
+    const skillHeader = document.createElement('div');
+    skillHeader.className = 'casino-skill-group-header';
+    skillHeader.innerHTML = `
+      <div class="sec-title-wrap">
+        <span class="casino-skill-title">${escapeHtml(skillData.name)}</span>
+        <span class="badge">Lvl ${skillMeta ? skillMeta.level : 0} / ${skillData.max_level}</span>
+        <span class="skill-pts">${skillMeta ? skillMeta.points.toLocaleString() : 0} / ${skillData.max_points.toLocaleString()} pts</span>
+      </div>
+      <div class="skill-actions">
+        <button class="btn btn-xs btn-primary btn-max-cas-sk">Max ${escapeHtml(skillData.name)}</button>
+        <button class="btn btn-xs btn-secondary btn-reset-cas-sk">Reset</button>
+      </div>
+    `;
+
+    skillHeader.querySelector('.btn-max-cas-sk').addEventListener('click', () => {
+      applyProgressionPreset('max_casino_skill', skillKey);
+    });
+    skillHeader.querySelector('.btn-reset-cas-sk').addEventListener('click', () => {
+      applyProgressionPreset('reset_casino_skill', skillKey);
+    });
+
+    skillGroup.appendChild(skillHeader);
+
+    Object.values(skillData.sections || {}).forEach(sec => {
+      const secBox = document.createElement('div');
+      secBox.className = 'section-box';
+
+      let secEarned = 0;
+      let secTotal = 0;
+      (sec.objectives || []).forEach(o => {
+        secEarned += o.earned_points || 0;
+        secTotal += o.points || 0;
+      });
+
+      const secHeader = document.createElement('div');
+      secHeader.className = 'section-header';
+      secHeader.innerHTML = `
+        <div class="sec-title-wrap">
+          <span class="section-title">${escapeHtml(sec.name)}</span>
+          <span class="section-summary-tag">${secEarned.toLocaleString()} / ${secTotal.toLocaleString()} pts</span>
+        </div>
+        <div class="section-actions">
+          <button class="btn btn-xs btn-secondary btn-max-cas-sec">Max Section</button>
+          <button class="btn btn-xs btn-secondary btn-reset-cas-sec">Reset</button>
+        </div>
+      `;
+
+      secHeader.querySelector('.btn-max-cas-sec').addEventListener('click', () => {
+        applyProgressionPreset('max_casino_section', sec.id);
+      });
+      secHeader.querySelector('.btn-reset-cas-sec').addEventListener('click', () => {
+        applyProgressionPreset('reset_casino_section', sec.id);
+      });
+
+      const secBody = document.createElement('div');
+      secBody.className = 'section-body';
+
+      const grid = document.createElement('div');
+      grid.className = 'objectives-grid';
+
+      (sec.objectives || []).forEach(obj => {
+        const item = document.createElement('div');
+        item.className = `objective-item ${obj.completed ? 'completed' : ''}`;
+
+        const left = document.createElement('div');
+        left.className = 'objective-left';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'objective-checkbox';
+        cb.checked = Boolean(obj.completed);
+        cb.addEventListener('change', (e) => {
+          setProgressionObjective(obj.id, e.target.checked);
+        });
+
+        const info = document.createElement('div');
+        info.className = 'objective-info';
+
+        const name = document.createElement('span');
+        name.className = 'objective-name';
+        name.textContent = obj.name;
+
+        const tags = document.createElement('div');
+        tags.className = 'objective-tags';
+        tags.innerHTML = `
+          <span class="tag-island tag-casino">Casino Island</span>
+          <span class="tag-points">+${obj.points} pts</span>
+          ${obj.target_value > 1 ? `<span class="tag-progress">${obj.current_value} / ${obj.target_value}</span>` : ''}
+        `;
+
+        info.appendChild(name);
+        info.appendChild(tags);
+
+        left.appendChild(cb);
+        left.appendChild(info);
+
+        const right = document.createElement('div');
+        right.className = 'objective-right';
+
+        if (obj.target_value > 1 && obj.type !== 'prog_bool' && obj.type !== 'vip_access' && obj.type !== 'prog_two_cars') {
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.className = 'counter-input';
+          input.value = obj.current_value;
+          input.min = 0;
+          input.max = Math.max(obj.target_value * 2, 100);
+          input.addEventListener('change', (e) => {
+            setProgressionObjective(obj.id, parseInt(e.target.value) || 0);
+          });
+          right.appendChild(input);
+        }
+
+        item.appendChild(left);
+        item.appendChild(right);
+        grid.appendChild(item);
+      });
+
+      secBody.appendChild(grid);
+      secBox.appendChild(secHeader);
+      secBox.appendChild(secBody);
+      skillGroup.appendChild(secBox);
+    });
+
+    container.appendChild(skillGroup);
+  });
 }
 

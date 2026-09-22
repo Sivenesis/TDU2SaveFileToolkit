@@ -289,38 +289,260 @@ Analysis of the third and fourth bytes confirmed:
 
 This correction was incorporated into `houses_database.json` to ensure vehicles display in their authentic residences.
 
+### 7.4 Additional Authenticated Residence Name Inversions & HC Resolutions
+Further savegame analysis across multi-residence profiles resolved the following property names and alternative HouseHC hashes:
+- **Falls House vs. Hydro House**:
+  - `EPH_L4F_1315` authenticated as **Falls House** (ID 112).
+  - `EPH_L4F_8766` authenticated as **Hydro House** (ID 98).
+- **Fontanelles house vs. Seaside apartment**:
+  - `EPH_L1BI_3055I` authenticated as **Fontanelles house** (ID 126).
+  - `EPH_L1BI_1216I` authenticated as **Seaside apartment** (ID 125).
+- **Kaiaka Paradise vs. Honouliali Village**:
+  - `EPH_L2B_3614` authenticated as **Kaiaka Paradise** (ID 28).
+  - `EPH_L2B_4214` authenticated as **Honouliali Village** (ID 60).
+- **Alternative Savegame HouseHCs mapped**:
+  - `0x5F443295917F8279` -> **Refuge house** (Ibiza, 4-Car, `EPH_L2D_4272I`).
+  - `0x5F453395967A8177` -> **Fujinoki residence** (Ibiza, 6-Car, `EPH_L3E_2127I`).
+  - `0x5F43334C927E8277` -> **Lokoea Village** (Hawaii, 6-Car, `EPH_L3C_2263`).
+
 ---
 
-## 8. Player Progression and Unlock Mechanics
+## 8. Player Progression Engine & Dual-Layer Synchronization
 
-### 8.1 Player Level Algorithm (1 to 73)
-Player progression in TDU2 is composed of four distinct disciplines:
-1. **Competition / Racing**: 0 to 15 levels
-2. **Collection**: 0 to 15 levels
-3. **Social**: 0 to 15 levels
-4. **Discovery / Cruising**: 0 to 18 levels
+The progression system in *Test Drive Unlimited 2* is one of the most intricate and tightly coupled systems in the Eden Games engine. Early attempts by community tools to edit player levels by modifying `Driver.Level` directly resulted in failure: upon loading a save, the game engine recomputed overall level from low-level data and instantly overwrote manual edits.
 
-The overall player level is calculated as the sum of these four categories:
+This section documents the reverse-engineered inner workings of the TDU2 progression architecture, the root causes of progression desynchronization, the dual-layer data structure, and the mathematical formulas governing all 4 core skills and Casino Island.
+
+---
+
+### 8.1 Global Player Level Architecture (Level 0 to 73)
+
+A player's global level in TDU2 is never an independent, directly mutable scalar. It is a strictly calculated aggregate of four primary disciplines plus Casino Island:
+
 ```
-Total Level = Racing Level + Collection Level + Social Level + Cruising Level
+Global Level = Racing Level (0-15)
+             + Discovery Level (0-18)
+             + Collection Level (0-15)
+             + Social Level (0-15)
+             + Casino Level (0-10)
 ```
+
+The maximum level caps across release tiers are:
 - **Base Game Maximum**: Level 60 (15 + 15 + 15 + 15).
-- **Offline DLCs Maximum**: Level 63.
-- **Online & Casino DLC Maximum**: Level 73.
+- **Exploration DLC Maximum**: Level 63 (Discovery cap raised from 15 to 18).
+- **Casino Island DLC Maximum**: Level 73 (Adds 10 Casino levels).
 
-Setting `Driver.Level` directly in `PlayerData.Driver` without exceeding 73 allows the player profile to display maximum prestige without corrupting leaderboard statistics.
+---
 
-> [!NOTE]
-> **Known Issue:** Level editing doesn't work on online profiles (Work in progress). On online profiles, the game engine verifies experience points and sub-discipline achievements against server-side session sync, which overrides manual `Driver.Level` modifications.
+### 8.2 The Dual-Layer Progression Architecture
 
-### 8.2 Currency Caps
-- **Driver Money ($)**: Stored as a 32-bit integer in `Driver.Money`. Clamped between `0` and `2,147,483,648`.
-- **Casino Points (Cp)**: Stored as a 32-bit integer in `Driver.NbCoupon`. Clamped between `0` and `2,147,483,648`.
+TDU2 stores progression state across two interdependent layers inside `PLAYERSAVE\DATA`:
 
-### 8.3 Furniture and Materials Unlocker
-- `PlayerData.MyHouse.SoldedFurnitures`: An array containing 383 integer entries representing catalog furniture items. Setting non-zero identifiers unlocks all pieces across all styles.
-- `PlayerData.MyHouse.SoldedMaterials`: An array of 61 interior wall, floor, and trim materials.
-- `PlayerData.Casino.unlockables0`: A 64-bit bitmask field. Bit 54 (`(unlockables0 >> 54) & 1`) governs the VIP Penthouse suite decor package. Setting this bit unlocks the exclusive casino furniture suite.
+```
++-------------------------------------------------------------------------+
+| LAYER 1: Concrete Gameplay State                                        |
+| - PlayerLicenses (Licenses, Contests, DrivingTests)                     |
+| - Wrecks (Wrecks_IBIZA, Wrecks_HAWAI)                                  |
+| - PhotosGP (40 Viewpoints across Ibiza & Hawaii)                        |
+| - RoadLock (8,700 64-bit Bitmasks for Island Roads)                     |
+| - StatisticsData (Multiplayer wins, police chases, instant challenges)  |
+| - Casino.CasinoProgressionSave (Slots, poker, roulette, tournaments)   |
++-------------------------------------------------------------------------+
+                                   ▲
+                                   │ Dual-Layer Synchronization
+                                   ▼
++-------------------------------------------------------------------------+
+| LAYER 2: Master Meta-Progression & In-Game Progression Book             |
+| - Rewards.EventXPs (Master 300-entry vector of objective milestones)    |
+| - PlayerLevels (Discipline XP scores and Level meters)                  |
+| - Driver.Level (Clamped summary level displayed on HUD and license)     |
++-------------------------------------------------------------------------+
+```
+
+#### Why Naive Save Editing Fails
+1. **Modifying `Driver.Level` Alone**: When TDU2 boots or saves, internal engine routines evaluate `PlayerLevels` and the state of `Rewards.EventXPs`. Any value in `Driver.Level` that does not equal the computed sum of individual discipline levels is overwritten immediately.
+2. **Modifying `PlayerLevels` Without `EventXPs`**: Modifying discipline levels or points without updating `Rewards.EventXPs` produces a desynchronization bug: the HUD displays the desired level, but the in-game progression book (pause menu) displays 0/141 objectives completed, and subsequent in-game milestone triggers cause points to calculate incorrectly or reset.
+3. **Modifying `EventXPs` Without Low-Level Structs**: Setting objectives completed in the progression book without unlocking licenses in `PlayerLicenses` or clearing road bits in `RoadLock` prevents the player from actually entering championship events or accessing roads on the world map.
+
+**The Solution: Dual-Layer Synchronization**. Every write operation in the toolkit mutates concrete gameplay structs, recalculates all points, writes milestone values to `Rewards.EventXPs`, populates `PlayerLevels`, and updates `Driver.Level` simultaneously.
+
+---
+
+### 8.3 Layer 1: Concrete Gameplay Structures
+
+#### 1. Racing School Licenses (`PlayerData.PlayerLicenses.Licenses`)
+An array of license entries. Each entry represents a license tier:
+- Index 0: `A5-A4` (Hawaii)
+- Index 1: `A3-A2` (Hawaii)
+- Index 2: `A1` (Hawaii)
+- Index 3: `C4` (Ibiza)
+- Index 4: `C3` (Hawaii)
+- Index 5: `B3` (Hawaii)
+- Index 6: `A7-A6` (Ibiza)
+- Index 7: `B4` (Ibiza)
+
+Each entry contains boolean flags (`Passed`, `Looked`), reward states (`RemainingReward: 0`), photo status (`PhotoIndex: 1`), and a nested `DrivingTest` array containing scores (e.g. `50000`) and test status (`Success: True`, `Try: True`).
+
+Current license tier summary values are stored at:
+- `CurLicenseA`: 0 = None, 1 = A7, 2 = A5, 3 = A3/A1
+- `CurLicenseB`: 0 = None, 1 = B4, 2 = B3
+- `CurLicenseC`: 0 = None, 1 = C4, 2 = C3
+
+#### 2. Championships & Cups (`PlayerData.PlayerLicenses.Contests`)
+An array of 25 championship and cup contests across Ibiza and Hawaii. Each contest entry contains:
+- `Passed`: Boolean flag indicating completion.
+- `Cup`: Integer trophy tier (`3` = Gold Cup, `-1` = Incomplete).
+- `State`: Integer contest state (`3` = Won/Completed).
+- `Challenge`: Array of individual championship race challenges with `Try: True`, `Score: 0`, and `ContestScores` float arrays.
+
+#### 3. Car Wrecks (`PlayerData.Wrecks`)
+- `Wrecks_IBIZA`: 20 wreck entries.
+- `Wrecks_HAWAI`: 40 wreck entries.
+Each wreck contains `Taken: True` (collected) and `Looked: True` (inspected in dealership workshop). Collecting all wrecks in an area awards 200 Discovery points and unlocks the corresponding bonus vehicle.
+
+#### 4. Viewpoints & Photography (`PlayerData.PhotosGP.PhotosGP`)
+An array of 40 viewpoint photo spots:
+- Indices 0 - 19: Ibiza viewpoints (20 spots).
+- Indices 20 - 39: Hawaii viewpoints (20 spots).
+Each contains a boolean `Taken: True`.
+
+#### 5. Road Discovery Bitmasks (`PlayerData.RoadLock.Locks`)
+The entire road network across both islands is partitioned into 8,700 64-bit unsigned integers:
+- `Locks`: An array of 8,700 64-bit integers (`[18446744073709551615] * 8700` when 100% discovered).
+- Each bit corresponds to an individual road segment. Clearing a lock bit signifies that the player has driven across that road segment.
+
+#### 6. Statistics & Milestones (`PlayerData.StatisticsData` and `PlayerData.Driver`)
+Tracks lifetime counters queried by progression objectives:
+- `MultiRaceWon`, `MultiRankedWon`, `MultiNonRankedWon`: Ranked and unranked multiplayer race wins.
+- `ExtraChaWon`: Instant challenges won against players or AI.
+- `NbChasePlayed`, `NbChaseEscaped`, `NbChaseArrested`: Police chase encounters.
+- `NbSurgeries`: Cosmetic surgery procedures performed.
+- `NbFriendsJoined`, `NbFriendsInvited`: Social interactions.
+
+---
+
+### 8.4 Layer 2: Master Meta-Progression (`Rewards.EventXPs`)
+
+The master record of all completed objectives is `PlayerData.Rewards.EventXPs`, a 300-entry vector of 32-bit integers. Each entry maps to a specific progression objective in the in-game progression book.
+
+When an objective is completed, its entry in `EventXPs` holds the objective's target milestone value. The toolkit maintains a verified reference vector (`MASTER_MAX_EVENT_XPS`) extracted from 100% complete game profiles.
+
+#### Skill Index Distribution in `EventXPs`:
+- **Competition** (84 indices):
+  - Licenses: 24 (C4), 25 (B4), 26 (A7-A6), 27 (C3), 28 (B3), 29 (A5-A4), 30 (A3-A2), 31 (A1).
+  - Championships: 32 - 53 (C4 to A1 High championships).
+  - Area Cups: 54 (Ibiza Cup 1), 55 (Hawaii Cup 1), 56 (Hawaii Cup 2).
+  - Duels: 57 (Miami), 58 (Ryan), 59 (Tess), 60 (Chris), 61 (Stuart).
+  - Multiplayer Challenges: 95 (50 ranked multiplayer wins).
+  - Instant Challenges: 3 (50 instant challenges won).
+- **Discovery** (25 indices):
+  - Area Road Milestones: 143 - 148 (Ibiza 1 & 2, Hawaii 1 to 4 road exploration tiers).
+  - Wrecks: 129 - 131, 149 - 151 (Ibiza and Hawaii wreck collections).
+  - Viewpoints: 189, 191 - 202 (Scenic photo spots).
+- **Collection** (65 indices):
+  - Vehicle Ownership: 0, 1, 2, 4, 5, 11, 12, 13, 14, 15 (Owning 1, 3, 6, 10, 15, 20, 25, 30, 40, 50 vehicles).
+  - Real Estate: 138 (1 house), 188 (3 houses), 16 (6, 10, 15 houses and furniture milestones).
+  - Clothing: 100 - 103 (5, 10, 20, 30 clothing items).
+  - Haircuts: 6 (2, 5, 10 haircut styles).
+  - Cosmetic Clinic: 114 (4 surgeries).
+  - Sticker Boards: 156 - 158 (2, 5, 10 sticker boards used).
+- **Social** (22 indices):
+  - Friends: 8 (5 friends), 9 (10 home invitations).
+  - Clubs: 132 - 137, 152 - 155 (Club creation, club XP, club level milestones).
+  - Police Chases: 176 - 178, 183, 185 - 186 (Evading police, arresting outlaws).
+
+---
+
+### 8.5 Progression Mathematical Formulas and Threshold Curves
+
+Discipline experience points do not scale linearly to levels. The game engine enforces non-linear thresholds:
+
+#### Standard 16-Level Curve (Competition, Collection, Social)
+Threshold points for Levels 0 through 15:
+
+| Level | Threshold XP | Delta from Prev | Level | Threshold XP | Delta from Prev |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **0** | 0 | - | **8** | 2,795 | +620 |
+| **1** | 125 | +125 | **9** | 3,510 | +715 |
+| **2** | 300 | +175 | **10** | 4,320 | +810 |
+| **3** | 525 | +225 | **11** | 5,225 | +905 |
+| **4** | 825 | +300 | **12** | 6,225 | +1,000 |
+| **5** | 1,200 | +375 | **13** | 7,355 | +1,130 |
+| **6** | 1,650 | +450 | **14** | 8,615 | +1,260 |
+| **7** | 2,175 | +525 | **15** | 10,000 | +1,385 |
+
+#### Extended 19-Level Curve (Discovery / Cruising)
+Discovery extends the standard curve with three additional high-tier levels:
+- **Level 16**: 11,500 XP (+1,500)
+- **Level 17**: 13,000 XP (+1,500)
+- **Level 18**: 14,500 XP (+1,500)
+
+#### Island Area Road Distribution
+Road exploration points are distributed across six discrete geographic areas:
+
+| Area Identifier | Geographic Zone | Road Segments | Cruising XP Points |
+| :--- | :--- | :---: | :---: |
+| `Area_0` | Ibiza Area 1 | 467 | 2,080 |
+| `Area_1` | Ibiza Area 2 | 924 | 2,080 |
+| `Area_2` | Hawaii Area 1 | 309 | 2,425 |
+| `Area_3` | Hawaii Area 2 | 1,144 | 2,640 |
+| `Area_4` | Hawaii Area 3 | 426 | 2,550 |
+| `Area_5` | Hawaii Area 4 | 998 | 2,725 |
+| **Total** | **All Islands** | **4,268** | **14,500** |
+
+---
+
+### 8.6 Casino Island Progression Architecture
+
+Casino Island operates on a dedicated sub-engine stored in `PlayerData.Casino.CasinoProgressionSave`. It features 10 levels comprising 7,000 total Casino points:
+
+```
+Total Casino Points = Competition (4,000 pts / 4 levels)
+                    + Discovery (1,000 pts / 2 levels)
+                    + Collection (1,000 pts / 2 levels)
+                    + Social (1,000 pts / 2 levels)
+                    = 7,000 pts / 10 levels
+```
+
+#### Casino Sections (15 Total):
+1. **Competition**: Slot Machines (500 pts), Video Poker (500 pts), Poker Cash Games (1,000 pts), Sit & Go Tournaments (1,000 pts), Tournament Championships (500 pts), Roulette (500 pts).
+2. **Discovery**: Look at Casino Game Rules (300 pts), Explore Casino Facilities (350 pts), Information Kiosks (350 pts).
+3. **Collection**: Exclusive Clothing (300 pts), Exclusive Furniture (350 pts), Exclusive Cars (Audi R8 Spyder, Spyker C8 Aileron Spyder - 350 pts).
+4. **Social**: Interaction with Players (300 pts), Casino Drinks & Cocktails (350 pts), Co-op Casino Games (350 pts).
+
+#### VIP and Ace Status Progression Milestones
+- **VIP Status (Casino Level 5)**:
+  - Requires reaching at least Casino Level 5 (cumulative 2,500+ Casino points).
+  - Unlocks the VIP Penthouse elevator and terrace area.
+  - Struct flags: `_vip_status = True`, `_vip_terrace_seen = 1`, `_hasSeenCasinoVIPStatusCinematic = True`.
+- **Ace of Casino (Casino Level 10)**:
+  - Requires reaching Casino Level 10 (7,000 Casino points).
+  - Unlocks exclusive high-roller recognition and the Ace badge.
+  - Struct flag: `_hasSeenCasinoACEStatusCinematic = True`.
+
+---
+
+### 8.7 The Dual-Layer Synchronization Pipeline
+
+The synchronization pipeline (`tdu2_level_engine.PlayerLevelEngine.sync_dual_layer()`) executes sequentially:
+
+1. **State Evaluation**: Inspects active values across `PlayerLicenses`, `Wrecks`, `PhotosGP`, `RoadLock`, `StatisticsData`, and `CasinoProgressionSave`.
+2. **Point Aggregation**: Computes earned points per section and skill against `OBJECTIVES_CATALOG` and `CASINO_CATALOG`.
+3. **Threshold Mapping**: Evaluates skill point totals against `SKILL_THRESHOLDS` and `DISCOVERY_THRESHOLDS` to derive levels 0-15 (or 0-18).
+4. **PlayerLevels Struct Generation**: Synchronizes `RacingLevels`, `CruisingLevels`, `CollectionLevels`, and `SocialLevels` dictionaries in `PlayerData.PlayerLevels`.
+5. **EventXPs Vector Injection**: Updates all mapped indices in `PlayerData.Rewards.EventXPs` with their milestone values using `MASTER_MAX_EVENT_XPS`.
+6. **Global Level Computation**: Computes `Global Level = sum(levels)` clamped between 1 and 73, and updates `PlayerData.Driver.Level`.
+7. **Casino Milestones Sync**: Updates `_vip_status`, `_vip_terrace_seen`, and cinematic bitmasks.
+8. **Cryptographic Sealing**: Generates an atomic safety backup in `Backups/`, recalculates Eden-SHA1 verification hashes, and writes the encrypted `DATA` container via atomic temporary replace (`os.replace`).
+
+---
+
+### 8.8 Currency Caps & Furniture Unlocks
+
+- **Driver Money ($)**: Stored as a signed 32-bit integer in `Driver.Money`. Clamped between `0` and `2,147,483,648`.
+- **Casino Points (Cp)**: Stored as a signed 32-bit integer in `Driver.NbCoupon`. Clamped between `0` and `2,147,483,648`.
+- **Casino Furniture Unlock**: Stored in `PlayerData.Casino.unlockables0` (64-bit bitmask). Bit 54 (`(unlockables0 >> 54) & 1`) governs the VIP Penthouse suite decor package. Setting this bit unlocks the entire casino furniture collection.
+
 
 ---
 
@@ -365,8 +587,7 @@ Versions 2.0.3 - 2.0.5 implement an enterprise-grade local security posture and 
 - **Path Boundary Containment**: To prevent path traversal attacks, static file serving and backup restoration enforce strict `pathlib.Path.relative_to` checks against `web/` and `Backups/` respectively. The `/api/load` endpoint verifies containment within registered save folders, while `/api/save-directory` verifies valid TDU2 file markers before changing active search paths.
 - **Atomic File Writes**: Direct file stream writing (`with open(..., 'wb')`) was eliminated across the entire toolkit. All writes are performed via `atomic_write()`: writing to a temporary file (`.tmp_<pid>`), flushing, executing `os.fsync()`, and executing `os.replace()`. This ensures that power cuts, app crashes, or antivirus locks cannot produce corrupted zero-byte save files.
 - **Transactional Rollback**: Multi-file mutations (e.g. modifying both `ProfileList.dat` and `OPTIONS` in mode switching) create pre-operation backups and roll back modified files if any subsequent step encounters an error.
-- **KEYMAP and OPTIONS File Isolation**: DirectInput/XInput hardware controller mappings in `KEYMAP` and user preferences in `OPTIONS` are strictly isolated and protected from unintentional overwriting. Synthetic re-serialization of `KEYMAP` is blocked to prevent controller corruption. `OPTIONS` is only modified when synchronizing `IsOnlineEnabledProfile` during mode switching.
-- **Level Editing Investigation (WIP)**: Direct modification of `Driver.Level` was paused in the WebGUI because TDU2 dynamically computes overall driver level from 4 category point trees (`PlayerLevels`).
+- **Progression Engine & Dual-Layer Synchronization (v3.0.0+)**: Naive direct mutation of `Driver.Level` was replaced with a complete dual-layer progression engine. The engine synchronizes low-level gameplay structs (`PlayerLicenses`, `Wrecks`, `RoadLock`, `StatisticsData`, `CasinoProgressionSave`) with the master 300-entry `Rewards.EventXPs` vector, `PlayerLevels`, and `Driver.Level` across all 73 levels.
 - **Payload Denial of Service Prevention**: Requests exceeding `MAX_CONTENT_LENGTH = 10 * 1024 * 1024` (10 MB) are rejected immediately with HTTP 413 (Payload Too Large).
 - **Credential Privacy**: Online account passwords in the decrypted `OPTIONS` container are kept strictly internal to backend conversion routines and are never transmitted across HTTP API responses.
 

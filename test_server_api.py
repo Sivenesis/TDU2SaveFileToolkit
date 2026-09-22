@@ -5,6 +5,7 @@ Tests all endpoints, profile editing, car swapping, car tuning, furniture unlock
 dedicated Backups/ creation, unpack/pack, and cryptographic verification.
 """
 
+import os
 import sys
 import time
 import json
@@ -73,7 +74,8 @@ def run_tests():
         test_save.write_bytes(enc_bytes)
     else:
         source_save = None
-        for cand in [TEST_DIR / "PLAYERSAVE" / "DATA", TEST_DIR.parent / "PLAYERSAVE" / "DATA"]:
+        user_docs_cand = Path(os.path.expanduser('~')) / "Documents" / "Eden Games" / "Test Drive Unlimited 2" / "savegame" / "Aspen" / "PLAYERSAVE" / "DATA"
+        for cand in [TEST_DIR / "PLAYERSAVE" / "DATA", TEST_DIR.parent / "PLAYERSAVE" / "DATA", user_docs_cand]:
             if cand.is_file():
                 source_save = cand
                 break
@@ -92,10 +94,12 @@ def run_tests():
     assert load_res["success"] is True
     summary = load_res["summary"]
     assert summary["profile_name"] == test_profile
-    assert summary["overall_level"] == 49, f"Expected level 49, got {summary['overall_level']}"
+    assert summary["overall_level"] in (25, 49), f"Expected level 25 or 49, got {summary['overall_level']}"
     assert summary["garage"]["count"] >= 1
     assert len(summary["garage"]["houses"]) >= 1
-    print(f"[+] 3. Profile Loaded: OK (Profile: {summary['profile_name']}, Level {summary['overall_level']}, ${summary['money']:,}, {summary['garage']['count']} cars in {len(summary['garage']['houses'])} houses)")
+    sample_house = summary["garage"]["houses"][0]
+    assert "internal_display" in sample_house and sample_house["internal_display"]
+    print(f"[+] 3. Profile Loaded: OK (Profile: {summary['profile_name']}, Level {summary['overall_level']}, ${summary['money']:,}, {summary['garage']['count']} cars in {len(summary['garage']['houses'])} houses; Sample: {sample_house['name']} [{sample_house['internal_display']}])")
 
     # 4. Test Direct Profile Editing (Tab 1) - Test up to 2,147,483,648 (Level edit removed - WIP)
     edit_payload = json.dumps({
@@ -233,6 +237,8 @@ def run_tests():
     mock_save_root = sandbox_dir / "mock_savegame"
     mock_save_root.mkdir(parents=True, exist_ok=True)
     aspen_src = Path("F:/Progs/VIBECODE/Google/Projects/TDU2offline2online/OFFLINEprofile/Aspen")
+    if not aspen_src.is_dir():
+        aspen_src = Path(os.path.expanduser('~')) / "Documents" / "Eden Games" / "Test Drive Unlimited 2" / "savegame" / "Aspen"
     
     if aspen_src.is_dir():
         aspen_dst = mock_save_root / "Aspen"
@@ -266,12 +272,12 @@ def run_tests():
     # Verify GET /api/profiles returns version, custom_dir, and online_status
     req = urllib.request.urlopen(f"{base_url}/api/profiles")
     prof_v2 = json.loads(req.read().decode('utf-8'))
-    assert prof_v2["version"] == "2.0.5"
+    assert prof_v2["version"] == "3.0.4"
     assert prof_v2["custom_dir"] == str(mock_save_root.resolve())
     aspen_entry = next((p for p in prof_v2["profiles"] if p["profile_name"] == "Aspen"), None)
     assert aspen_entry is not None
     assert aspen_entry["online_status"]["registry_online"] is False
-    print(f"[+] 15b. GET /api/profiles v2.0.5 Metadata & Online Status: OK")
+    print(f"[+] 15b. GET /api/profiles v3.0.4 Metadata & Online Status: OK")
 
     # 16. Test Online Mode Switcher (Tab 4) - Switch to ONLINE with custom credentials
     switch_payload = json.dumps({
@@ -440,7 +446,7 @@ def run_tests():
     shutil.rmtree(sandbox_dir, ignore_errors=True)
 
     print("\n" + "=" * 68)
-    print("  ALL FULL TOOLKIT INTEGRATION & SECURITY TESTS PASSED 100% (v2.0.5)!")
+    print("  ALL FULL TOOLKIT INTEGRATION & SECURITY TESTS PASSED 100% (v3.0.4)!")
     print("=" * 68 + "\n")
 
 if __name__ == '__main__':

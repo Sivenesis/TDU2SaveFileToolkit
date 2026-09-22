@@ -16,7 +16,7 @@ import shutil
 import argparse
 from pathlib import Path
 
-__version__ = "2.0.5"
+__version__ = "3.0.4"
 
 # ==============================================================================
 # 1. EMBEDDED CRYPTOGRAPHIC CONSTANTS & TABLES
@@ -1041,6 +1041,81 @@ def tune_garage_car(data_dict, slot: int, acceleration: int = None, top_speed: i
     return data_dict, msg
 
 
+def customize_garage_car(data_dict, slot: int, paint_idx: int = None, rim_idx: int = None, interior_idx: int = None, paint_type: int = 0, reset_custom_paint: bool = True, cars_db: dict = None) -> tuple:
+    """
+    Customizes vehicle options (exterior color, wheels/rims, and interior trim) for a garage slot.
+    - paint_idx: 0-based index into vehicle's available colors in DBCarsAndColors
+    - rim_idx: 0-based index into vehicle's available rims in DBCarsAndRims
+    - interior_idx: 0-based index into chosen color's available interior trims (_interior_1..15)
+    - paint_type: 0 for official factory stock paint (default), or custom finish (1..8)
+    - reset_custom_paint: if True, clears DeluxeMainColor* and HasSticker to ensure authentic factory shader rendering
+    """
+    if 'PlayerData' in data_dict and 'Garage' in data_dict['PlayerData']:
+        garage = data_dict['PlayerData']['Garage']
+    elif 'Garage' in data_dict:
+        garage = data_dict['Garage']
+    else:
+        raise ValueError("Could not locate Garage in savegame data.")
+
+    if not (0 <= slot < len(garage)):
+        raise IndexError(f"Garage slot index {slot} out of range (0..{len(garage)-1}).")
+
+    slot_entry = garage[slot]
+    car = slot_entry.setdefault('Car', {})
+    if car.get('Status', 4294967295) == 4294967295 or car.get('Archetype', 0) == 0:
+        raise ValueError(f"Garage slot #{slot + 1} is empty. Cannot customize an empty slot.")
+
+    arch = car.get('Archetype', 0)
+    car_entry = cars_db.get(str(arch), {}) if cars_db else {}
+    car_name = car_entry.get('name', f"Archetype #{arch}")
+
+    changes = []
+    if paint_idx is not None:
+        p_idx = max(0, int(paint_idx))
+        car['PaintIndice'] = p_idx
+        car['PaintType'] = int(paint_type)
+        if reset_custom_paint:
+            car['HasSticker'] = False
+            for k in [
+                'DeluxeMainColorR', 'DeluxeMainColorG', 'DeluxeMainColorB', 'DeluxeMainColorA',
+                'DeluxeSecColorR', 'DeluxeSecColorG', 'DeluxeSecColorB', 'DeluxeSecColorA',
+                'DeluxeLogoColorR', 'DeluxeLogoColorG', 'DeluxeLogoColorB', 'DeluxeLogoColorA',
+                'DeluxeSec2ColorR', 'DeluxeSec2ColorG', 'DeluxeSec2ColorB', 'DeluxeSec2ColorA'
+            ]:
+                car[k] = 0
+        col_name = f"Color #{p_idx}"
+        colors_list = car_entry.get('colors', [])
+        if 0 <= p_idx < len(colors_list):
+            col_name = colors_list[p_idx].get('name', col_name)
+        changes.append(f"Color: {col_name} (Idx {p_idx})")
+
+    if rim_idx is not None:
+        r_idx = max(0, int(rim_idx))
+        car['RimIndice'] = r_idx
+        rim_name = f"Rim #{r_idx}"
+        rims_list = car_entry.get('rims', [])
+        if 0 <= r_idx < len(rims_list):
+            rim_name = rims_list[r_idx].get('name', rim_name)
+        changes.append(f"Wheels: {rim_name} (Idx {r_idx})")
+
+    if interior_idx is not None:
+        i_idx = max(0, int(interior_idx))
+        car['InteriorIndice'] = i_idx
+        int_name = f"Trim #{i_idx}"
+        active_p_idx = car.get('PaintIndice', 0)
+        colors_list = car_entry.get('colors', [])
+        if 0 <= active_p_idx < len(colors_list):
+            ints_list = colors_list[active_p_idx].get('interiors', [])
+            for item in ints_list:
+                if item.get('index') == i_idx:
+                    int_name = item.get('name', int_name)
+                    break
+        changes.append(f"Interior: {int_name} (Idx {i_idx})")
+
+    msg = f"Customized {car_name} in Slot #{slot + 1} ({', '.join(changes) if changes else 'No changes'})"
+    return data_dict, msg
+
+
 def edit_player_profile(data_dict, money=None, casino_points=None, level=None, racing_level=None, collection_level=None, social_level=None, cruising_points=None, cruising_areas=None) -> tuple:
     """
     Direct user editing of player profile metrics:
@@ -1063,8 +1138,12 @@ def edit_player_profile(data_dict, money=None, casino_points=None, level=None, r
         changes.append(f"Money: ${driver['Money']:,}")
 
     if casino_points is not None:
-        driver['NbCoupon'] = max(0, min(2147483648, int(casino_points)))
-        changes.append(f"Casino Points: {driver['NbCoupon']:,} Cp")
+        cp = max(0, min(2147483648, int(casino_points)))
+        driver['NbCoupon'] = cp
+        casino_container = pd.get('Casino') or data_dict.get('Casino')
+        if isinstance(casino_container, dict):
+            casino_container['money'] = cp
+        changes.append(f"Casino Points: {cp:,} Cp")
 
     if level is not None:
         lvl = max(1, min(73, int(level)))
@@ -1247,9 +1326,18 @@ def cmd_edit(args):
     if cp_val is None and getattr(args, 'coupons', None) is not None:
         cp_val = args.coupons
     if cp_val is not None:
-        old_val = data_obj['Driver']['NbCoupon']
-        data_obj['Driver']['NbCoupon'] = int(cp_val)
-        changes.append(f"Casino Points: {old_val:,} Cp -> {int(cp_val):,} Cp")
+        cp_int = max(0, min(2147483648, int(cp_val)))
+        old_val = 0
+        casino_container = data_obj.get('Casino')
+        if isinstance(casino_container, dict) and 'money' in casino_container:
+            old_val = casino_container.get('money', 0)
+            casino_container['money'] = cp_int
+        elif 'Driver' in data_obj and 'NbCoupon' in data_obj['Driver']:
+            old_val = data_obj['Driver'].get('NbCoupon', 0)
+        data_obj.setdefault('Driver', {})['NbCoupon'] = cp_int
+        if isinstance(data_obj.get('Casino'), dict):
+            data_obj['Casino']['money'] = cp_int
+        changes.append(f"Casino Points: {old_val:,} Cp -> {cp_int:,} Cp")
 
     # 3. Max Levels & Objectives
     if args.max_levels:
@@ -1432,6 +1520,27 @@ def cmd_edit(args):
     # 9. Unlock All Furniture & Materials
     if getattr(args, 'unlock_furniture', False):
         _, msg = unlock_all_furniture(data_obj)
+        changes.append(msg)
+
+    # 10. Customize vehicle options (color, rims, interior)
+    if getattr(args, 'customize_car', None) is not None:
+        slot = args.customize_car
+        cars_db = None
+        try:
+            db_p = Path(__file__).parent / 'cars_database.json'
+            if db_p.exists():
+                with open(db_p, 'r', encoding='utf-8') as f:
+                    cars_db = json.load(f)
+        except Exception:
+            pass
+        _, msg = customize_garage_car(
+            data_obj,
+            slot,
+            paint_idx=getattr(args, 'paint', None),
+            rim_idx=getattr(args, 'rim', None),
+            interior_idx=getattr(args, 'interior', None),
+            cars_db=cars_db
+        )
         changes.append(msg)
 
     if not changes:
@@ -2005,6 +2114,10 @@ def main():
     p_edit.add_argument('--tune-speed', type=int, choices=[0, 1, 2, 3, 4], help="Set top speed tuning level (0-4).")
     p_edit.add_argument('--tune-braking', type=int, choices=[0, 1, 2, 3, 4], help="Set braking tuning level (0-4).")
     p_edit.add_argument('--unlock-furniture', action='store_true', help="Unlock all 383 furniture items, 61 materials, and Casino VIP furniture set.")
+    p_edit.add_argument('--customize-car', type=int, metavar='SLOT', help="Garage slot index (0-based) to customize (color, rims, interior).")
+    p_edit.add_argument('--paint', type=int, metavar='PAINT_INDICE', help="Set official exterior color index (0-based).")
+    p_edit.add_argument('--rim', type=int, metavar='RIM_INDICE', help="Set official wheel/rim index (0-based).")
+    p_edit.add_argument('--interior', type=int, metavar='INTERIOR_INDICE', help="Set official interior trim index (0-based).")
 
     # switch
     p_switch = subparsers.add_parser('switch', help="Switch profile between Online and Offline mode.")
