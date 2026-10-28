@@ -7,7 +7,7 @@ import tdu2_webgui as webgui
 
 def test_customization_pipeline():
     print("=== Testing Core Customization & Save Roundtrip ===")
-    save_dir = Path(r"C:\Users\Ponker\Documents\Eden Games\Test Drive Unlimited 2\savegame")
+    save_dir = Path(os.path.expanduser('~')) / "Documents" / "Eden Games" / "Test Drive Unlimited 2" / "savegame"
     if not save_dir.exists():
         print(f"Save dir not found: {save_dir}")
         return False

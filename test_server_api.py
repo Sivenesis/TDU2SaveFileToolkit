@@ -309,9 +309,7 @@ def run_tests():
     # 15. Custom Save Directory API (v2.0.0)
     mock_save_root = sandbox_dir / "mock_savegame"
     mock_save_root.mkdir(parents=True, exist_ok=True)
-    aspen_src = Path("F:/Progs/VIBECODE/Google/Projects/TDU2offline2online/OFFLINEprofile/Aspen")
-    if not aspen_src.is_dir():
-        aspen_src = Path(os.path.expanduser('~')) / "Documents" / "Eden Games" / "Test Drive Unlimited 2" / "savegame" / "Aspen"
+    aspen_src = Path(os.path.expanduser('~')) / "Documents" / "Eden Games" / "Test Drive Unlimited 2" / "savegame" / "Aspen"
     
     if aspen_src.is_dir():
         aspen_dst = mock_save_root / "Aspen"
