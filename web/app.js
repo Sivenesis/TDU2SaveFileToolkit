@@ -83,6 +83,39 @@ function cacheElements() {
   el.moneyFormattedHint = document.getElementById('moneyFormattedHint');
   el.casinoFormattedHint = document.getElementById('casinoFormattedHint');
   el.btnSaveProfile = document.getElementById('btnSaveProfile');
+  el.inputDriverName = document.getElementById('inputDriverName');
+  el.driverNameCapBadge = document.getElementById('driverNameCapBadge');
+  el.inputOdometerKms = document.getElementById('inputOdometerKms');
+  el.inputHaircuts = document.getElementById('inputHaircuts');
+  el.inputCurrentCar = document.getElementById('inputCurrentCar');
+  el.inputHasBeenMillionaire = document.getElementById('inputHasBeenMillionaire');
+
+  // Raw Tree Editor (Tab 6)
+  el.rawTreeContainer = document.getElementById('rawTreeContainer');
+  el.rawTreeSearchInput = document.getElementById('rawTreeSearchInput');
+  el.btnRawTreeSearch = document.getElementById('btnRawTreeSearch');
+  el.btnRawTreeReset = document.getElementById('btnRawTreeReset');
+  el.rawSearchResults = document.getElementById('rawSearchResults');
+  el.rawSearchResultsList = document.getElementById('rawSearchResultsList');
+  el.btnCloseSearchResults = document.getElementById('btnCloseSearchResults');
+  el.rawSearchCount = document.getElementById('rawSearchCount');
+  el.rawInspectorPanel = document.getElementById('rawInspectorPanel');
+  el.rawInspectorEmpty = document.getElementById('rawInspectorEmpty');
+  el.rawInspectorContent = document.getElementById('rawInspectorContent');
+  el.rawInspectorKindBadge = document.getElementById('rawInspectorKindBadge');
+  el.rawMetaName = document.getElementById('rawMetaName');
+  el.rawMetaType = document.getElementById('rawMetaType');
+  el.rawMetaOffset = document.getElementById('rawMetaOffset');
+  el.rawMetaBounds = document.getElementById('rawMetaBounds');
+  el.rawMetaPath = document.getElementById('rawMetaPath');
+  el.rawScalarEditBlock = document.getElementById('rawScalarEditBlock');
+  el.rawNodeInput = document.getElementById('rawNodeInput');
+  el.rawNodeInputLabel = document.getElementById('rawNodeInputLabel');
+  el.rawNodeInputHint = document.getElementById('rawNodeInputHint');
+  el.btnApplyNodeValue = document.getElementById('btnApplyNodeValue');
+  el.rawContainerBlock = document.getElementById('rawContainerBlock');
+  el.rawChildCount = document.getElementById('rawChildCount');
+  el.rawChildrenTableBody = document.getElementById('rawChildrenTableBody');
 
   // Casino Furniture (Tab 1)
   el.statCasinoFurniture = document.getElementById('statCasinoFurniture') || document.getElementById('statCasinoVip');
@@ -183,6 +216,8 @@ function setupTabs() {
         renderProgressionTab();
       } else if (target === 'tab-save-tools') {
         fetchBackups();
+      } else if (target === 'tab-raw-tree') {
+        loadRawTreeRoot();
       } else if (target === 'tab-profile') {
         if (state.activeProfile) {
           if (el.emptyProfileBanner) {
@@ -330,6 +365,36 @@ function setupEventListeners() {
   }
   if (el.catalogBrandFilter) {
     el.catalogBrandFilter.addEventListener('change', renderCatalogList);
+  }
+
+  // Raw Tree Editor Controls (Tab 6)
+  if (el.btnApplyNodeValue) el.btnApplyNodeValue.addEventListener('click', applyRawNodeValue);
+  if (el.btnRawTreeSearch) el.btnRawTreeSearch.addEventListener('click', searchRawTree);
+  if (el.rawTreeSearchInput) {
+    el.rawTreeSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') searchRawTree();
+    });
+  }
+  if (el.btnRawTreeReset) {
+    el.btnRawTreeReset.addEventListener('click', () => {
+      if (el.rawTreeSearchInput) el.rawTreeSearchInput.value = '';
+      if (el.rawSearchResults) el.rawSearchResults.style.display = 'none';
+      loadRawTreeRoot();
+    });
+  }
+  if (el.btnCloseSearchResults) {
+    el.btnCloseSearchResults.addEventListener('click', () => {
+      if (el.rawSearchResults) el.rawSearchResults.style.display = 'none';
+    });
+  }
+  if (el.inputDriverName) {
+    el.inputDriverName.addEventListener('input', (e) => {
+      if (el.driverNameCapBadge && state.saveSummary) {
+        const curLen = e.target.value.length;
+        const maxCap = state.saveSummary.name_capacity || curLen;
+        el.driverNameCapBadge.textContent = `${curLen} / ${maxCap} bytes`;
+      }
+    });
   }
 
   // Global backdrop click to dismiss modals
@@ -683,6 +748,17 @@ function updateUI(summary) {
   if (el.inputCasinoPoints) el.inputCasinoPoints.value = summary.casino_points;
   if (el.casinoFormattedHint) el.casinoFormattedHint.textContent = `${summary.casino_points.toLocaleString()} Cp`;
 
+  if (el.inputDriverName) el.inputDriverName.value = summary.driver_name || '';
+  if (el.driverNameCapBadge) {
+    const curLen = (summary.driver_name || '').length;
+    const maxCap = summary.name_capacity || curLen;
+    el.driverNameCapBadge.textContent = `${curLen} / ${maxCap} bytes`;
+  }
+  if (el.inputOdometerKms) el.inputOdometerKms.value = summary.odometer_kms || 0;
+  if (el.inputHaircuts) el.inputHaircuts.value = summary.haircuts || 0;
+  if (el.inputCurrentCar) el.inputCurrentCar.value = summary.current_car || 0;
+  if (el.inputHasBeenMillionaire) el.inputHasBeenMillionaire.checked = Boolean(summary.has_been_millionaire);
+
   // Casino Furniture status
   const furn = summary.furniture || {};
   const isCasinoFurnUnlocked = Boolean(furn.casino_vip_unlocked || furn.casino_furniture_unlocked);
@@ -715,7 +791,12 @@ async function saveProfileChanges() {
 
   const payload = {
     money: Math.min(2147483648, Math.max(0, Number(el.inputMoney.value) || 0)),
-    casino_points: Math.min(2147483648, Math.max(0, Number(el.inputCasinoPoints.value) || 0))
+    casino_points: Math.min(2147483648, Math.max(0, Number(el.inputCasinoPoints.value) || 0)),
+    driver_name: el.inputDriverName ? el.inputDriverName.value.trim() : undefined,
+    odometer_kms: el.inputOdometerKms ? Number(el.inputOdometerKms.value) || 0 : undefined,
+    haircuts: el.inputHaircuts ? Number(el.inputHaircuts.value) || 0 : undefined,
+    current_car: el.inputCurrentCar ? Number(el.inputCurrentCar.value) || 0 : undefined,
+    has_been_millionaire: el.inputHasBeenMillionaire ? Boolean(el.inputHasBeenMillionaire.checked) : undefined
   };
 
   addLog("Applying direct profile changes...", "info");
@@ -942,7 +1023,15 @@ function renderGarageShowroom() {
         <div class="car-tuning-drawer">
           <div class="tuning-drawer-header">
             <span class="tuning-drawer-title">Tuning & Performance</span>
-            <button class="btn btn-xs btn-gold btn-max-tune">Max All (Lvl 4)</button>
+            <div class="quick-stage-group">
+              <span class="quick-stage-label">Stage:</span>
+              <div class="quick-stage-stack">
+                <div class="quick-stage-buttons">
+                  ${[0, 1, 2, 3, 4].map(stg => `<button class="btn btn-xs ${stg === 4 ? 'btn-gold' : 'btn-secondary'} btn-quick-stage" data-stage="${stg}">S${stg}</button>`).join('')}
+                </div>
+                <button class="btn btn-xs btn-gold btn-max-tune">Max All (Lvl 4)</button>
+              </div>
+            </div>
           </div>
 
           <div class="tuning-row">
@@ -983,6 +1072,9 @@ function renderGarageShowroom() {
             </button>
             <button class="btn btn-xs btn-gold btn-swap-model">
               Swap Model
+            </button>
+            <button class="btn btn-xs btn-danger-subtle btn-clear-slot" title="Empty this slot and reset to unassigned">
+              Empty
             </button>
           </div>
         </div>
@@ -1035,6 +1127,22 @@ function renderGarageShowroom() {
         });
       }
 
+      // Quick Stage Buttons (0-4)
+      card.querySelectorAll('.btn-quick-stage').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const stage = Number(btn.dataset.stage);
+          executeSetUpgrades(car.index, stage, car.name);
+        });
+      });
+
+      // Clear Slot Button
+      const clearBtn = card.querySelector('.btn-clear-slot');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          executeClearSlot(car.index, car.name);
+        });
+      }
+
       // Customize Options Button
       const customizeBtn = card.querySelector('.btn-customize-toggle');
       if (customizeBtn) {
@@ -1063,6 +1171,62 @@ function renderGarageShowroom() {
 }
 
 // --- VEHICLE TUNING API ---
+async function executeSetUpgrades(slotIndex, stage, carName) {
+  addLog(`Setting Stage ${stage} upgrades on Slot #${slotIndex + 1} (${carName})...`, "info");
+  try {
+    const res = await fetch('/api/set-upgrades', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ slot: slotIndex, stage: stage })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    state.saveSummary = data.summary;
+    updateUI(state.saveSummary);
+
+    addLog(`[UPGRADE SUCCESS] ${data.message}`, "success");
+    if (data.backup_path) {
+      addLog(`Safety backup created: ${data.backup_path}`, "info");
+    }
+    showToast(`Slot #${slotIndex + 1} upgraded to Stage ${stage}!`, "success");
+  } catch (err) {
+    addLog(`Upgrade failed: ${err.message}`, "error");
+    showToast(`Upgrade Error: ${err.message}`, "error");
+  }
+}
+
+function executeClearSlot(slotIndex, carName) {
+  showConfirmModal(
+    `Empty Garage Slot #${slotIndex + 1}?`,
+    `Are you sure you want to empty <strong>${escapeHtml(carName)}</strong> from Slot #${slotIndex + 1}?<br><br>The slot will be cleared and reset to an unassigned state. An automatic backup will be created.`,
+    async () => {
+      addLog(`Emptying Garage Slot #${slotIndex + 1} (${carName})...`, "info");
+      try {
+        const res = await fetch('/api/clear-slot', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ slot: slotIndex })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        state.saveSummary = data.summary;
+        updateUI(state.saveSummary);
+
+        addLog(`[SLOT CLEARED] ${data.message}`, "success");
+        if (data.backup_path) {
+          addLog(`Safety backup created: ${data.backup_path}`, "info");
+        }
+        showToast(`Slot #${slotIndex + 1} emptied successfully!`, "success");
+      } catch (err) {
+        addLog(`Clear slot failed: ${err.message}`, "error");
+        showToast(`Clear Error: ${err.message}`, "error");
+      }
+    }
+  );
+}
+
 async function executeTuning(slotIndex, tunePayload, carName) {
   addLog(`Tuning Slot #${slotIndex + 1} (${carName})...`, "info");
   try {
@@ -1153,14 +1317,18 @@ function renderCatalogList() {
     return;
   }
 
+  const BLOCKED_ARCHETYPES = [2005, 2006, 2015];
+
   filtered.forEach(car => {
+    const isBlocked = BLOCKED_ARCHETYPES.includes(Number(car.archetype));
     const item = document.createElement('div');
-    item.className = 'catalog-item';
+    item.className = `catalog-item ${isBlocked ? 'catalog-item-blocked' : ''}`;
     item.innerHTML = `
       <div>
         <div class="catalog-item-header">
           <span class="catalog-item-brand">${escapeHtml(car.brand)}</span>
           <span class="catalog-item-arch">#${car.archetype}</span>
+          ${isBlocked ? '<span class="badge badge-blocked">Crash Hazard (Blocked)</span>' : ''}
         </div>
         <div class="catalog-item-title">${escapeHtml(car.name)}</div>
         <div class="catalog-item-specs">
@@ -1169,19 +1337,23 @@ function renderCatalogList() {
           <span>${car.acceleration ? car.acceleration.toFixed(1) + 's' : '--'}</span>
         </div>
         <div class="catalog-item-options-line">
-          ${car.has_options 
-            ? `<span class="opt-avail-badge">${car.colors_count} Colors • ${car.rims_count} Wheels</span>` 
-            : `<span class="opt-fixed-badge">Fixed Specification</span>`}
+          ${isBlocked
+            ? '<span class="opt-fixed-badge" style="color:var(--accent-red,#ef4444);">Ambient traffic AI vehicle - No cockpit assets</span>'
+            : (car.has_options 
+              ? `<span class="opt-avail-badge">${car.colors_count} Colors • ${car.rims_count} Wheels</span>` 
+              : `<span class="opt-fixed-badge">Fixed Specification</span>`)}
         </div>
       </div>
-      <button class="catalog-item-btn">
-        Swap to this Vehicle
+      <button class="catalog-item-btn ${isBlocked ? 'btn-disabled' : ''}" ${isBlocked ? 'disabled title="Ambient AI vehicle without cockpit assets. Blocked to prevent crash."' : ''}>
+        ${isBlocked ? 'Swap Blocked' : 'Swap to this Vehicle'}
       </button>
     `;
 
-    item.querySelector('.catalog-item-btn').addEventListener('click', () => {
-      executeCatalogSwap(state.swapTargetSlot, car.archetype, car.name);
-    });
+    if (!isBlocked) {
+      item.querySelector('.catalog-item-btn').addEventListener('click', () => {
+        executeCatalogSwap(state.swapTargetSlot, car.archetype, car.name);
+      });
+    }
 
     el.catalogList.appendChild(item);
   });
@@ -2613,5 +2785,341 @@ function renderProgressionCasinoTab() {
 
     container.appendChild(skillGroup);
   });
+}
+
+// ==========================================
+// --- RAW TREE EDITOR (TAB 6) LOGIC ---
+// ==========================================
+
+async function loadRawTreeRoot() {
+  if (!el.rawTreeContainer) return;
+  if (!state.activeProfile) {
+    el.rawTreeContainer.innerHTML = `
+      <div class="empty-state-banner">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div class="empty-text">
+          <strong>No Save Profile Loaded:</strong> Please load a save profile to explore and mutate the raw XMBF node hierarchy.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  el.rawTreeContainer.innerHTML = '<div class="tree-loading">Loading root nodes...</div>';
+  try {
+    const res = await fetch('/api/raw-tree');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    el.rawTreeContainer.innerHTML = '';
+    const rootNodes = data.children || [];
+    if (!rootNodes.length) {
+      el.rawTreeContainer.innerHTML = '<div style="padding: 1.5rem; color: var(--text-dim);">No root nodes found in savefile.</div>';
+      return;
+    }
+
+    const treeList = document.createElement('div');
+    treeList.className = 'tree-nodes-list';
+    rootNodes.forEach(child => {
+      treeList.appendChild(createTreeNodeElement(child));
+    });
+    el.rawTreeContainer.appendChild(treeList);
+    addLog(`Loaded ${rootNodes.length} top-level XMBF nodes into Raw Tree Editor.`, "info");
+  } catch (err) {
+    el.rawTreeContainer.innerHTML = `<div class="tree-error">Failed loading raw tree: ${escapeHtml(err.message)}</div>`;
+    addLog(`Raw tree load error: ${err.message}`, "error");
+  }
+}
+
+function createTreeNodeElement(nodeInfo) {
+  const nodeEl = document.createElement('div');
+  nodeEl.className = 'tree-node';
+  nodeEl.dataset.path = nodeInfo.path;
+
+  const row = document.createElement('div');
+  row.className = 'tree-node-row';
+
+  const expander = document.createElement('button');
+  expander.className = 'tree-expander';
+  if (nodeInfo.is_container) {
+    expander.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>';
+  } else {
+    expander.classList.add('leaf');
+    expander.innerHTML = '<span class="tree-bullet">•</span>';
+  }
+
+  const icon = document.createElement('span');
+  icon.className = 'tree-icon';
+  icon.innerHTML = nodeInfo.is_container
+    ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+
+  const label = document.createElement('span');
+  label.className = 'tree-label';
+  label.textContent = nodeInfo.name;
+
+  const badge = document.createElement('span');
+  badge.className = `tree-badge type-${(nodeInfo.type || 'unknown').toLowerCase()}`;
+  badge.textContent = nodeInfo.type;
+
+  row.appendChild(expander);
+  row.appendChild(icon);
+  row.appendChild(label);
+  row.appendChild(badge);
+
+  if (!nodeInfo.is_container && nodeInfo.value !== null && nodeInfo.value !== undefined) {
+    const valPreview = document.createElement('span');
+    valPreview.className = 'tree-val-preview';
+    valPreview.textContent = String(nodeInfo.value);
+    row.appendChild(valPreview);
+  } else if (nodeInfo.is_container && nodeInfo.child_count !== undefined) {
+    const countPreview = document.createElement('span');
+    countPreview.className = 'tree-count-preview';
+    countPreview.textContent = `(${nodeInfo.child_count} children)`;
+    row.appendChild(countPreview);
+  }
+
+  nodeEl.appendChild(row);
+
+  let childrenContainer = null;
+  let isExpanded = false;
+
+  if (nodeInfo.is_container) {
+    expander.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isExpanded) {
+        if (!childrenContainer) {
+          childrenContainer = document.createElement('div');
+          childrenContainer.className = 'tree-node-children';
+          nodeEl.appendChild(childrenContainer);
+          loadContainerChildren(nodeInfo.path, childrenContainer, expander);
+        } else {
+          childrenContainer.style.display = 'block';
+        }
+        expander.classList.add('open');
+        isExpanded = true;
+      } else {
+        if (childrenContainer) childrenContainer.style.display = 'none';
+        expander.classList.remove('open');
+        isExpanded = false;
+      }
+    });
+  }
+
+  row.addEventListener('click', () => {
+    document.querySelectorAll('.tree-node-row.selected').forEach(r => r.classList.remove('selected'));
+    row.classList.add('selected');
+    inspectNode(nodeInfo);
+  });
+
+  return nodeEl;
+}
+
+async function loadContainerChildren(parentPath, containerEl, expanderBtn) {
+  containerEl.innerHTML = '<div class="tree-loading-inline">Loading...</div>';
+  try {
+    const res = await fetch(`/api/raw-tree?path=${encodeURIComponent(parentPath)}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    containerEl.innerHTML = '';
+    const children = data.children || [];
+    if (!children.length) {
+      containerEl.innerHTML = '<div class="tree-empty-inline">Empty container</div>';
+      return;
+    }
+    children.forEach(child => {
+      containerEl.appendChild(createTreeNodeElement(child));
+    });
+  } catch (err) {
+    containerEl.innerHTML = `<div class="tree-error-inline">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function inspectNode(nodeInfo) {
+  state.selectedRawNode = nodeInfo;
+  if (!el.rawInspectorPanel) return;
+
+  if (el.rawInspectorEmpty) el.rawInspectorEmpty.style.display = 'none';
+  if (el.rawInspectorContent) el.rawInspectorContent.style.display = 'flex';
+
+  if (el.rawInspectorKindBadge) {
+    el.rawInspectorKindBadge.textContent = nodeInfo.is_container ? 'CONTAINER' : 'LEAF SCALAR';
+    el.rawInspectorKindBadge.className = `inspector-kind-badge ${nodeInfo.is_container ? 'badge-container' : 'badge-scalar'}`;
+  }
+
+  if (el.rawMetaName) el.rawMetaName.textContent = nodeInfo.name;
+  if (el.rawMetaType) el.rawMetaType.textContent = nodeInfo.type;
+  if (el.rawMetaOffset) el.rawMetaOffset.textContent = nodeInfo.offset !== undefined ? `0x${nodeInfo.offset.toString(16).toUpperCase()} (${nodeInfo.offset})` : '--';
+  if (el.rawMetaPath) el.rawMetaPath.textContent = nodeInfo.path || nodeInfo.name;
+
+  if (el.rawMetaBounds) {
+    if (nodeInfo.min_val !== undefined && nodeInfo.max_val !== undefined) {
+      el.rawMetaBounds.textContent = `[${nodeInfo.min_val} ... ${nodeInfo.max_val}]`;
+    } else if (nodeInfo.capacity !== undefined) {
+      el.rawMetaBounds.textContent = `Max length: ${nodeInfo.capacity} bytes`;
+    } else {
+      el.rawMetaBounds.textContent = 'None';
+    }
+  }
+
+  if (nodeInfo.is_container) {
+    if (el.rawScalarEditBlock) el.rawScalarEditBlock.style.display = 'none';
+    if (el.rawContainerBlock) el.rawContainerBlock.style.display = 'block';
+    if (el.rawChildCount) el.rawChildCount.textContent = `${nodeInfo.child_count || 0} child nodes`;
+
+    if (el.rawChildrenTableBody) {
+      el.rawChildrenTableBody.innerHTML = '';
+      (nodeInfo.children || []).forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${escapeHtml(c.name)}</strong></td>
+          <td><span class="badge badge-subtle">${escapeHtml(c.type)}</span></td>
+          <td>${c.is_container ? `<em>${c.child_count || 0} items</em>` : escapeHtml(String(c.value !== null && c.value !== undefined ? c.value : ''))}</td>
+        `;
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => {
+          inspectNode(c);
+        });
+        el.rawChildrenTableBody.appendChild(tr);
+      });
+    }
+  } else {
+    if (el.rawContainerBlock) el.rawContainerBlock.style.display = 'none';
+    if (el.rawScalarEditBlock) el.rawScalarEditBlock.style.display = 'block';
+
+    if (el.rawNodeInputLabel) el.rawNodeInputLabel.textContent = `Node Value (${nodeInfo.type})`;
+    if (el.rawNodeInput) {
+      el.rawNodeInput.value = nodeInfo.value !== null && nodeInfo.value !== undefined ? nodeInfo.value : '';
+      if (nodeInfo.type === 'bool') {
+        el.rawNodeInput.placeholder = 'true / false or 1 / 0';
+      } else if (nodeInfo.type.startsWith('int') || nodeInfo.type.startsWith('uint') || nodeInfo.type === 'float') {
+        el.rawNodeInput.placeholder = 'Numeric value';
+      } else {
+        el.rawNodeInput.placeholder = 'String value';
+      }
+    }
+
+    if (el.rawNodeInputHint) {
+      if (nodeInfo.min_val !== undefined && nodeInfo.max_val !== undefined) {
+        el.rawNodeInputHint.textContent = `Valid range: ${nodeInfo.min_val} to ${nodeInfo.max_val}`;
+      } else if (nodeInfo.capacity !== undefined) {
+        el.rawNodeInputHint.textContent = `In-place string limit: cannot exceed ${nodeInfo.capacity} bytes`;
+      } else {
+        el.rawNodeInputHint.textContent = 'In-place byte mutation with validation';
+      }
+    }
+  }
+}
+
+async function applyRawNodeValue() {
+  if (!state.selectedRawNode) {
+    showToast("Please select a leaf node first.", "error");
+    return;
+  }
+  const node = state.selectedRawNode;
+  if (node.is_container) {
+    showToast("Cannot set value on a container node.", "error");
+    return;
+  }
+
+  const rawVal = el.rawNodeInput?.value ?? '';
+  let parsedVal = rawVal;
+
+  if (node.type === 'bool') {
+    const s = String(rawVal).toLowerCase().trim();
+    parsedVal = (s === 'true' || s === '1' || s === 'yes');
+  } else if (node.type.startsWith('int') || node.type.startsWith('uint')) {
+    parsedVal = parseInt(rawVal, 10);
+    if (isNaN(parsedVal)) {
+      showToast("Please enter a valid integer.", "error");
+      return;
+    }
+  } else if (node.type === 'float') {
+    parsedVal = parseFloat(rawVal);
+    if (isNaN(parsedVal)) {
+      showToast("Please enter a valid float.", "error");
+      return;
+    }
+  }
+
+  addLog(`Mutating raw node '${node.path}' in-place...`, "info");
+  try {
+    const res = await fetch('/api/raw-node/set', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ path: node.path, value: parsedVal })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    node.value = parsedVal;
+    if (data.summary) {
+      state.saveSummary = data.summary;
+      updateUI(state.saveSummary);
+    }
+
+    const rowEl = document.querySelector(`.tree-node[data-path="${node.path}"] .tree-val-preview`);
+    if (rowEl) rowEl.textContent = String(parsedVal);
+
+    addLog(`[RAW MUTATION SUCCESS] ${data.message}`, "success");
+    showToast(`Updated '${node.name}' to ${parsedVal}!`, "success");
+  } catch (err) {
+    addLog(`Raw mutation failed: ${err.message}`, "error");
+    showToast(`Mutation Error: ${err.message}`, "error");
+  }
+}
+
+async function searchRawTree() {
+  const query = el.rawTreeSearchInput?.value?.trim();
+  if (!query) {
+    showToast("Please enter a search query.", "info");
+    return;
+  }
+
+  addLog(`Searching XMBF raw tree for '${query}'...`, "info");
+  if (el.rawSearchResults) el.rawSearchResults.style.display = 'block';
+  if (el.rawSearchResultsList) el.rawSearchResultsList.innerHTML = '<div style="padding: 1rem; color: var(--text-dim);">Searching 30,000+ nodes...</div>';
+
+  try {
+    const res = await fetch(`/api/raw-tree?search=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    const matches = data.matches || [];
+    if (el.rawSearchCount) el.rawSearchCount.textContent = matches.length;
+
+    if (!matches.length) {
+      if (el.rawSearchResultsList) el.rawSearchResultsList.innerHTML = '<div style="padding: 1rem; color: var(--text-dim);">No nodes matched your query.</div>';
+      return;
+    }
+
+    if (el.rawSearchResultsList) {
+      el.rawSearchResultsList.innerHTML = '';
+      matches.forEach(m => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        item.innerHTML = `
+          <div class="result-top">
+            <span class="result-name">${escapeHtml(m.name)}</span>
+            <span class="badge ${m.is_container ? 'badge-container' : 'badge-scalar'}">${escapeHtml(m.type)}</span>
+          </div>
+          <div class="result-path">${escapeHtml(m.path)}</div>
+          ${!m.is_container && m.value !== null && m.value !== undefined ? `<div class="result-value">Value: <code>${escapeHtml(String(m.value))}</code></div>` : ''}
+        `;
+        item.addEventListener('click', () => {
+          inspectNode(m);
+        });
+        el.rawSearchResultsList.appendChild(item);
+      });
+    }
+
+    addLog(`Found ${matches.length} raw node matches for '${query}'.`, "success");
+  } catch (err) {
+    if (el.rawSearchResultsList) el.rawSearchResultsList.innerHTML = `<div class="tree-error">${escapeHtml(err.message)}</div>`;
+    addLog(`Raw search failed: ${err.message}`, "error");
+  }
 }
 

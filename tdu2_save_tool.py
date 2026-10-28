@@ -560,6 +560,550 @@ def encode_dict_to_xmbf(template_xmbf_bytes, data_dict, root_name=None):
 
 
 # ==============================================================================
+# 4B. IN-PLACE BINARY MUTATION & CRYPTOGRAPHIC VERIFICATION ENGINE
+# ==============================================================================
+
+class SaveError(Exception):
+    """Raised when save file integrity or cryptographic verification fails."""
+    pass
+
+_PRIM = {
+    1: ('<?', 1),
+    2: ('<b', 1),
+    3: ('<h', 2),
+    4: ('<i', 4),
+    5: ('<q', 8),
+    6: ('<B', 1),
+    7: ('<H', 2),
+    8: ('<I', 4),
+    9: ('<Q', 8),
+    10: ('<f', 4),
+    11: ('<d', 8),
+}
+
+_RANGE = {
+    2: (-128, 127),
+    3: (-32768, 32767),
+    4: (-2147483648, 2147483647),
+    5: (-0x8000000000000000, 0x7FFFFFFFFFFFFFFF),
+    6: (0, 255),
+    7: (0, 65535),
+    8: (0, 0xFFFFFFFF),
+    9: (0, 0xFFFFFFFFFFFFFFFF)
+}
+
+_PNAME = {
+    1: 'bool',
+    2: 'int8',
+    3: 'int16',
+    4: 'int32',
+    5: 'int64',
+    6: 'uint8',
+    7: 'uint16',
+    8: 'uint32',
+    9: 'uint64',
+    10: 'float',
+    11: 'double',
+    12: 'string'
+}
+
+BLOCKED_IDS = {2005, 2006, 2015}
+
+class Node:
+    """An offset-aware node inside the XMBF binary tree."""
+    __slots__ = ('doc', 'name', 'kind', 'tid', 'ntype', 'off', 'count', 'arr', 'esize', '_ch')
+
+    def __init__(self, doc, name: str, kind: str, **kw):
+        self.doc = doc
+        self.name = name
+        self.kind = kind
+        self._ch = None
+        self.tid = kw.get('tid')
+        self.ntype = kw.get('ntype')
+        self.off = kw.get('off', 0)
+        self.count = kw.get('count', 0)
+        self.arr = kw.get('arr', 0)
+        self.esize = kw.get('esize', 0)
+
+    @property
+    def is_container(self) -> bool:
+        return self.kind in ('struct', 'array')
+
+    @property
+    def type_name(self) -> str:
+        if self.kind == 'prim':
+            return _PNAME.get(self.ntype, f'prim_{self.ntype}')
+        if self.kind == 'str':
+            return 'string'
+        if self.kind == 'array':
+            elem_t = _PNAME.get(self.ntype, 'struct') if self.ntype else 'struct'
+            return f'array[{self.count}] of {elem_t}'
+        return 'struct'
+
+    def children(self):
+        if self._ch is None:
+            self._ch = self.doc._children(self)
+        return self._ch
+
+    def child(self, name):
+        for c in self.children():
+            if c.name == name or (isinstance(name, int) and c.name == f'[{name}]'):
+                return c
+        return None
+
+    def f(self, name):
+        return self.child(name)
+
+    def path(self, *names):
+        n = self
+        for name in names:
+            if n is None:
+                return None
+            n = n.child(name)
+        return n
+
+    def __getitem__(self, idx):
+        if self.kind == 'array' and isinstance(idx, int):
+            return self.children()[idx]
+        return self.child(idx)
+
+    def __bool__(self):
+        return True
+
+    def __len__(self):
+        if self.kind == 'array':
+            return self.count
+        return len(self.children())
+
+    def get(self):
+        d = self.doc.data
+        base = self.doc.base
+        if self.kind == 'prim':
+            fmt, _ = _PRIM[self.ntype]
+            val = struct.unpack_from(fmt, d, base + self.off)[0]
+            if self.ntype == 1:
+                return bool(val)
+            elif self.ntype in (10, 11):
+                return float(val)
+            return int(val)
+        if self.kind == 'str':
+            p = struct.unpack_from('<I', d, base + self.off)[0]
+            if p == 0xFFFFFFFF:
+                return None
+            s = base + p
+            try:
+                e = d.index(b'\x00', s)
+            except ValueError:
+                return ""
+            return bytes(d[s:e]).decode('utf-8', errors='replace')
+        raise TypeError(f"Container '{self.name}' has no scalar value.")
+
+    def display(self) -> str:
+        v = self.get()
+        if self.kind == 'prim' and self.ntype == 10:
+            return f"{v:.6g}"
+        return str(v)
+
+    def string_capacity(self) -> int:
+        if self.kind != 'str':
+            return 0
+        p = struct.unpack_from('<I', self.doc.data, self.doc.base + self.off)[0]
+        if p == 0xFFFFFFFF:
+            return 0
+        s = self.doc.base + p
+        try:
+            e = self.doc.data.index(b'\x00', s)
+            return e - s
+        except ValueError:
+            return 0
+
+    def parse(self, text: str):
+        text = str(text).strip()
+        if self.kind == 'str':
+            return text
+        t = self.ntype
+        if t == 1:
+            if text.lower() in ('1', 'true', 'yes', 'on'):
+                return True
+            if text.lower() in ('0', 'false', 'no', 'off'):
+                return False
+            raise ValueError('Enter true or false')
+        if t in (10, 11):
+            return float(text)
+        val = int(text, 0)
+        lo, hi = _RANGE[t]
+        if not (lo <= val <= hi):
+            raise ValueError(f"Out of range for {_PNAME[t]} ({lo} .. {hi})")
+        return val
+
+    def set(self, value):
+        d = self.doc.data
+        base = self.doc.base
+        if self.kind == 'prim':
+            fmt, _ = _PRIM[self.ntype]
+            if self.ntype == 1:
+                val = bool(value)
+            elif self.ntype in (10, 11):
+                val = float(value)
+            else:
+                lo, hi = _RANGE[self.ntype]
+                val = int(value)
+                if not (lo <= val <= hi):
+                    raise ValueError(f"Value {val} out of range for {_PNAME[self.ntype]} ({lo}..{hi})")
+            struct.pack_into(fmt, d, base + self.off, val)
+            return
+
+        if self.kind == 'str':
+            p = struct.unpack_from('<I', d, base + self.off)[0]
+            if p == 0xFFFFFFFF:
+                raise ValueError("String pointer is null; cannot allocate in place.")
+            s = base + p
+            try:
+                e = d.index(b'\x00', s)
+            except ValueError:
+                e = s
+            cap = e - s
+            new_bytes = str(value).encode('utf-8')
+            if len(new_bytes) > cap:
+                raise ValueError(f"Text exceeds original byte capacity ({len(new_bytes)} > {cap} bytes max).")
+            d[s:e] = new_bytes + b'\x00' * (cap - len(new_bytes))
+            return
+
+        raise TypeError(f"Cannot directly set value on container '{self.name}'.")
+
+
+class XMBF:
+    """Offset-aware XMBF parser that operates on a mutable byte buffer."""
+    def __init__(self, data):
+        if len(data) < 28 or data[:4] != b'XMBF':
+            raise SaveError("Not an XMBF block.")
+        _, _, s0, s1, s2, rn, rt = struct.unpack_from('<7I', data, 0)
+        self.data = bytearray(data) if not isinstance(data, bytearray) else data
+        self.base = s2
+        self.sec0 = bytes(data[s0:s1])
+        num_dwords = (s2 - s1) // 4
+        self.T = struct.unpack_from(f'<{num_dwords}I', data, s1)
+        self.root_name = self._sym(rn)
+        self.root_tid = rt
+
+    def _sym(self, off: int) -> str:
+        end = self.sec0.find(b'\x00', off)
+        if end == -1:
+            return ""
+        return self.sec0[off:end].decode('latin1')
+
+    def root(self) -> Node:
+        return Node(self, self.root_name, 'struct', tid=self.root_tid, off=0)
+
+    def _children(self, n: Node) -> list:
+        T = self.T
+        out = []
+        if n.kind == 'struct':
+            hdr = T[n.tid]
+            nf = (hdr >> 4) & 0x7ff
+            cur = n.off
+            for f in range(nf):
+                dw0 = T[n.tid + 2 + f * 2]
+                dw1 = T[n.tid + 3 + f * 2]
+                name = self._sym(dw0 & 0x7fffffff)
+                is_arr = (dw1 >> 31) & 1
+                t_id = dw1 & 0x3fffffff
+                if is_arr:
+                    cnt, aoff = struct.unpack_from('<II', self.data, self.base + cur)
+                    cur += 8
+                    eh = T[t_id]
+                    out.append(Node(
+                        self, name, 'array', tid=t_id,
+                        ntype=eh & 0xf, count=cnt, arr=aoff,
+                        esize=(eh >> 15) & 0x1ffff,
+                        off=cur - 8
+                    ))
+                    continue
+                th = T[t_id]
+                nt = th & 0xf
+                if nt == 0:
+                    out.append(Node(self, name, 'struct', tid=t_id, off=cur))
+                    cur += (th >> 15) & 0x1ffff
+                    continue
+                if nt == 12:
+                    out.append(Node(self, name, 'str', off=cur))
+                    cur += 4
+                    continue
+                if nt == 13:
+                    vt, vo = struct.unpack_from('<II', self.data, self.base + cur)
+                    out.append(Node(self, name, 'struct', tid=vt, off=vo))
+                    cur += 8
+                    continue
+                out.append(Node(self, name, 'prim', ntype=nt, off=cur))
+                cur += (th >> 15) & 0x1ffff
+            return out
+
+        elif n.kind == 'array':
+            for k in range(n.count):
+                nm = f'[{k}]'
+                if n.ntype == 0:
+                    out.append(Node(self, nm, 'struct', tid=n.tid, off=n.arr + k * n.esize))
+                elif n.ntype == 12:
+                    out.append(Node(self, nm, 'str', off=n.arr + k * 4))
+                else:
+                    out.append(Node(self, nm, 'prim', ntype=n.ntype, off=n.arr + k * n.esize))
+            return out
+
+        return out
+
+
+class Slot:
+    """Wrapper around one Garage[] element for convenient vehicle manipulation."""
+    def __init__(self, node: Node, index: int = 0):
+        self.node = node
+        self.car = node.child('Car')
+        self._index = index
+
+    def f(self, name: str) -> Node:
+        return self.car.child(name) if self.car else None
+
+    @property
+    def index(self) -> int:
+        idx_node = self.node.child('IndexInGarage')
+        return idx_node.get() if idx_node else self._index
+
+    @property
+    def house(self) -> int:
+        h_node = self.node.child('House')
+        return h_node.get() if h_node else 0
+
+    @property
+    def status(self) -> int:
+        s_node = self.f('Status')
+        return s_node.get() if s_node else 2
+
+    @property
+    def archetype(self) -> int:
+        a_node = self.f('Archetype')
+        return a_node.get() if a_node else 0
+
+    @property
+    def car_id(self) -> int:
+        id_node = self.f('ID')
+        return id_node.get() if id_node else 0xFFFFFFFF
+
+    @property
+    def vin(self) -> int:
+        vin_node = self.f('VIN')
+        return vin_node.get() if vin_node else 0
+
+    @property
+    def owned(self) -> bool:
+        return self.status == 0
+
+
+def garage_slots(session) -> list:
+    """Returns all Slot objects in session.tree.child('Garage')."""
+    g = session.tree.child('Garage')
+    if not g:
+        return []
+    return [Slot(node, idx) for idx, node in enumerate(g.children())]
+
+
+def compute_synthetic_vin(owned_slots) -> int:
+    """Derives non-colliding 64-bit VIN seeded from authentic profile VINs."""
+    vins = []
+    for s in owned_slots:
+        v_node = s.f('VIN')
+        if v_node:
+            v = v_node.get()
+            if v and v != 0xFFFFFFFFFFFFFFFF:
+                vins.append(v)
+    if not vins:
+        vins = [0x4D53384200014B7D]
+    top = max(v >> 32 for v in vins)
+    low = max(vins, key=lambda v: v >> 32) & 0xFFFFFFFF
+    return ((top + 1) << 32) | low
+
+
+def allocate_next_car_id(slots) -> int:
+    """Allocates a non-colliding internal car ID."""
+    ids = set()
+    for s in slots:
+        id_node = s.f('ID')
+        if id_node:
+            cid = id_node.get()
+            if cid is not None and cid != 0xFFFFFFFF:
+                ids.add(cid)
+    return max(ids or {0}) + 1
+
+
+def set_vehicle(session, slot: Slot, archetype: int, reset_look: bool = True):
+    """
+    Assigns vehicle archetype to slot with non-colliding VIN, ID,
+    and comprehensive sanitization (zeroes 16 deluxe colors, dirt, wear, and mechanical states).
+    """
+    if archetype in BLOCKED_IDS:
+        raise ValueError(f"Archetype #{archetype} is blocked (AI ambient traffic model lacks player assets and crashes game).")
+
+    slots = garage_slots(session)
+    was_empty = not slot.owned
+    slot.f('Archetype').set(archetype)
+
+    if was_empty:
+        owned = [s for s in slots if s.owned]
+        new_id = allocate_next_car_id(slots)
+        new_vin = compute_synthetic_vin(owned)
+        slot.f('Status').set(0)
+        slot.f('ID').set(new_id)
+        slot.f('VIN').set(new_vin)
+
+    if was_empty or reset_look:
+        for nm in ('PaintType', 'PaintIndice', 'RimIndice', 'InteriorIndice'):
+            node = slot.f(nm)
+            if node:
+                node.set(0)
+        for part in ('Main', 'Sec', 'Logo', 'Sec2'):
+            for ch in 'RGBA':
+                node = slot.f(f'Deluxe{part}Color{ch}')
+                if node:
+                    node.set(0)
+        for nm in ('UpgradeRate', 'OdometerKms', 'PlayTime', 'Price'):
+            node = slot.f(nm)
+            if node:
+                node.set(0)
+        if slot.f('HasSticker'):
+            slot.f('HasSticker').set(False)
+        if slot.f('HardtopState'):
+            slot.f('HardtopState').set(0)
+        if slot.f('WindowsState'):
+            slot.f('WindowsState').set(0)
+
+        up = slot.f('Car Upgrades')
+        if up:
+            for c in up.children():
+                c.set(0)
+        dirt = slot.f('Car Dirt')
+        if dirt:
+            dirt_data = dirt.child('Dirt Data')
+            if dirt_data:
+                for c in dirt_data.children():
+                    c.set(0)
+            wash = dirt.child('CarWashCoating')
+            if wash:
+                wash.set(0)
+
+
+def clear_slot(session, slot: Slot):
+    """Restores empty garage slot matching authentic game specifications."""
+    slot.f('Status').set(2)
+    slot.f('ID').set(0xFFFFFFFF)
+    slot.f('Archetype').set(0)
+    slot.f('VIN').set(0)
+    for nm in ('PaintIndice', 'RimIndice', 'InteriorIndice'):
+        node = slot.f(nm)
+        if node:
+            node.set(255)
+    if slot.f('PaintType'):
+        slot.f('PaintType').set(0)
+    for part in ('Main', 'Sec', 'Logo', 'Sec2'):
+        for ch in 'RGBA':
+            node = slot.f(f'Deluxe{part}Color{ch}')
+            if node:
+                node.set(0)
+    for nm in ('UpgradeRate', 'OdometerKms', 'PlayTime', 'Price'):
+        node = slot.f(nm)
+        if node:
+            node.set(0)
+    if slot.f('HasSticker'):
+        slot.f('HasSticker').set(False)
+    if slot.f('HardtopState'):
+        slot.f('HardtopState').set(0)
+    if slot.f('WindowsState'):
+        slot.f('WindowsState').set(0)
+    up = slot.f('Car Upgrades')
+    if up:
+        for c in up.children():
+            c.set(0)
+    dirt = slot.f('Car Dirt')
+    if dirt:
+        dirt_data = dirt.child('Dirt Data')
+        if dirt_data:
+            for c in dirt_data.children():
+                c.set(0)
+        wash = dirt.child('CarWashCoating')
+        if wash:
+            wash.set(0)
+
+
+def set_upgrades(slot: Slot, level: int):
+    """Sets performance stage (0..4) across all Car Upgrades child nodes in slot."""
+    level = max(0, min(4, int(level)))
+    up = slot.f('Car Upgrades')
+    if up:
+        for c in up.children():
+            c.set(level)
+
+
+class Session:
+    """
+    Active save profile session providing in-place binary mutations,
+    in-memory cryptographic round-trip verification, and safe atomic writes.
+    """
+    FILE = "DATA"
+
+    def __init__(self, root_dir, profile_name: str, filename: str = "DATA"):
+        self.root = Path(root_dir)
+        self.profile = profile_name
+        self.filename = filename
+
+        cand_paths = [
+            self.root / "PLAYERSAVE" / filename,
+            self.root / self.profile / "PLAYERSAVE" / filename,
+            self.root / filename
+        ]
+        self.path = None
+        for cp in cand_paths:
+            if cp.is_file():
+                self.path = cp
+                break
+        if not self.path:
+            raise FileNotFoundError(f"Cannot locate container '{filename}' in {self.root}")
+
+        self.blob = self.path.read_bytes()
+        plain_bytes, self.footer, self.target_filename = decrypt_save_file(self.blob, self.profile, filename)
+        self.original = bytes(plain_bytes)
+        self.doc = XMBF(bytearray(plain_bytes))
+        self.tree = self.doc.root()
+
+    @property
+    def modified(self) -> bool:
+        return bytes(self.doc.data) != self.original
+
+    def save(self, do_backup: bool = True, backup_operation: str = "Edit") -> str:
+        """
+        Executes pre-commit size invariance check, in-memory crypto round-trip check,
+        creates timestamped backup, and performs atomic replacement.
+        """
+        if len(self.doc.data) != len(self.original):
+            raise SaveError(f"Size invariant failed: buffer size changed ({len(self.original)} -> {len(self.doc.data)} bytes).")
+
+        new_ct = encrypt_save_file(bytes(self.doc.data), self.profile, self.target_filename, original_footer=self.footer)
+        check_plain, _, _ = decrypt_save_file(new_ct, self.profile, self.target_filename)
+        if bytes(check_plain) != bytes(self.doc.data):
+            raise SaveError("Cryptographic RAM verification failed: round-trip buffer mismatch. Aborting write.")
+
+        backup_path_str = None
+        if do_backup:
+            try:
+                import tdu2_webgui as webgui
+                b_path = webgui.create_operation_backup(self.path, self.profile, operation=backup_operation)
+                if b_path:
+                    backup_path_str = str(b_path)
+            except Exception:
+                pass
+
+        atomic_write(self.path, new_ct)
+        self.original = bytes(self.doc.data)
+        return backup_path_str
+
+
+# ==============================================================================
 # 5. PROFILE DETECTION HELPER
 # ==============================================================================
 
