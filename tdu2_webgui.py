@@ -24,7 +24,7 @@ import secrets
 import tdu2_save_tool as core
 from tdu2_level_engine import TDU2LevelEngine
 
-TOOLKIT_VERSION = "3.0.4"
+TOOLKIT_VERSION = "3.1.0"
 PORT = 8282
 SESSION_TOKEN = secrets.token_hex(16)
 MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10 MB payload limit

@@ -1,5 +1,5 @@
 /**
- * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 3.0.4
+ * Test Drive Unlimited 2 (TDU2) Save File Toolkit - Version 3.1.0
  * Modern client logic for 4-tab architecture, custom path management, and online mode switcher.
  */
 
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupTabs();
   setupEventListeners();
   setStandbyUI();
-  addLog("TDU2 Save File Toolkit v3.0.4 initialized. Scanning available save profiles...", "info");
+  addLog("TDU2 Save File Toolkit v3.1.0 initialized. Scanning available save profiles...", "info");
   fetchProfiles();
   fetchCatalog();
 });

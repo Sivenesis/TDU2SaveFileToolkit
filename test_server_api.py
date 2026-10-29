@@ -343,12 +343,12 @@ def run_tests():
     # Verify GET /api/profiles returns version, custom_dir, and online_status
     req = urllib.request.urlopen(f"{base_url}/api/profiles")
     prof_v2 = json.loads(req.read().decode('utf-8'))
-    assert prof_v2["version"] == "3.0.4"
+    assert prof_v2["version"] == "3.1.0"
     assert prof_v2["custom_dir"] == str(mock_save_root.resolve())
     aspen_entry = next((p for p in prof_v2["profiles"] if p["profile_name"] == "Aspen"), None)
     assert aspen_entry is not None
     assert aspen_entry["online_status"]["registry_online"] is False
-    print(f"[+] 15b. GET /api/profiles v3.0.4 Metadata & Online Status: OK")
+    print(f"[+] 15b. GET /api/profiles v3.1.0 Metadata & Online Status: OK")
 
     # 16. Test Online Mode Switcher (Tab 4) - Switch to ONLINE with custom credentials
     switch_payload = json.dumps({
@@ -517,7 +517,7 @@ def run_tests():
     shutil.rmtree(sandbox_dir, ignore_errors=True)
 
     print("\n" + "=" * 68)
-    print("  ALL FULL TOOLKIT INTEGRATION & SECURITY TESTS PASSED 100% (v3.0.4)!")
+    print("  ALL FULL TOOLKIT INTEGRATION & SECURITY TESTS PASSED 100% (v3.1.0)!")
     print("=" * 68 + "\n")
 
 if __name__ == '__main__':

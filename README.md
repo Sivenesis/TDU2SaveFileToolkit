@@ -1,4 +1,4 @@
-# Test Drive Unlimited 2 Save File Toolkit (WebGUI) v3.0.4
+# Test Drive Unlimited 2 Save File Toolkit (WebGUI) v3.1.0
 
 A zero-dependency local web interface and editing engine for _Test Drive Unlimited 2_ save files on Windows PC.
 
@@ -20,11 +20,13 @@ A zero-dependency local web interface and editing engine for _Test Drive Unlimit
 
 ## Features
 
-- **Profile Editor**: Edit Driver Money (up to $2,147,483,648) and Casino Points (up to 2,147,483,648 Cp), and unlock Casino furniture.
+- **Profile Editor**: Edit Driver Money (up to $2,147,483,648), Casino Points (up to 2,147,483,648 Cp), Driver Name (with UTF-8 byte capacity tracking), Odometer distance, Salon haircut visits, Active vehicle index, Millionaire milestone flag, and unlock Casino furniture.
 - **Progression Editor**: Full level engine and objective manager for Global Level (0 to 73) and Casino Island across Competition, Discovery, Collection, and Social skills.
-- **Garage Editor**: Browse properties and vehicles, swap car models from the complete 359-vehicle catalog, apply factory paint/wheels/interior trims, and customize performance tuning stages.
-- **Backup Manager**: Create manual safety snapshots, search and restore previous save versions with one click, and unpack/pack save containers to formatted JSON.
+- **Garage Editor**: Browse properties and vehicles, swap car models from the complete 359-vehicle catalog, apply factory paint/wheels/interior trims, batch tune performance stages (S0–S4), clear garage slots cleanly, with built-in crash hazard guardrails blocking AI ambient traffic models.
+- **Raw XMBF Tree Editor**: Hierarchical tree explorer and real-time search across 30,000+ nodes with type descriptors, byte offset inspection, and in-place scalar value mutations.
+- **Backup Manager**: Create manual safety snapshots, search and restore previous save versions (supporting both legacy `.bak` files and full directory snapshots), and unpack/pack save containers to formatted JSON.
 - **Online Mode Switcher (BETA)**: Switch profiles between Offline and Online modes, configure multiplayer credentials, and clone progression into server-registered profiles.
+- **In-Place Binary Engine & RAM Verification**: 100% byte-fidelity in-place AST mutations with pre-commit cryptographic encryption/decryption round-trip verification in RAM before touching disk.
 
 ---
 

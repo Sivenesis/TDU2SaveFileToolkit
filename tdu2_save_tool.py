@@ -16,7 +16,7 @@ import shutil
 import argparse
 from pathlib import Path
 
-__version__ = "3.0.4"
+__version__ = "3.1.0"
 
 # ==============================================================================
 # 1. EMBEDDED CRYPTOGRAPHIC CONSTANTS & TABLES
