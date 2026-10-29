@@ -97,7 +97,7 @@
       </div>
     </section>
 
-    <!-- Navigation Tabs (5 Tabs) -->
+    <!-- Navigation Tabs (6 Tabs) -->
     <nav class="app-tabs">
       <button class="tab-btn active" data-tab="tab-profile">
         Player Profile Editor
@@ -108,11 +108,14 @@
       <button class="tab-btn" data-tab="tab-garage">
         Garage Editor (<span id="garageTabCount">0</span>)
       </button>
-        <button class="tab-btn" data-tab="tab-save-tools">
-          Backup Manager
-        </button>
+      <button class="tab-btn" data-tab="tab-save-tools">
+        Backup Manager
+      </button>
       <button class="tab-btn" data-tab="tab-online-switch">
         Online Mode Switcher
+      </button>
+      <button class="tab-btn" data-tab="tab-raw-tree">
+        Raw Tree Editor
       </button>
     </nav>
 
@@ -167,7 +170,16 @@
             </div>
 
             <form id="profileForm" class="editor-form" onsubmit="return false;">
-              <div class="form-grid-2">
+              <div class="form-grid-3">
+                <div class="form-group">
+                  <label for="inputDriverName">Driver Name</label>
+                  <input type="text" id="inputDriverName" class="custom-input" placeholder="Driver profile name">
+                  <div class="input-hint-row">
+                    <span class="input-hint input-hint-muted">In-place limit:</span>
+                    <span class="input-hint" id="driverNameCapBadge">0 bytes</span>
+                  </div>
+                </div>
+
                 <div class="form-group">
                   <label for="inputMoney">Driver Money ($)</label>
                   <input type="number" id="inputMoney" class="custom-input" min="0" max="2147483648"
@@ -187,6 +199,36 @@
                     <span class="input-hint" id="casinoFormattedHint">0 Cp</span>
                   </div>
                 </div>
+              </div>
+
+              <div class="form-grid-3" style="margin-top: 1rem;">
+                <div class="form-group">
+                  <label for="inputOdometerKms">Total Distance (km)</label>
+                  <input type="number" id="inputOdometerKms" class="custom-input" step="0.1" min="0"
+                    placeholder="e.g. 1500.5">
+                  <span class="input-hint">Lifetime driver distance</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="inputHaircuts">Haircut Visits</label>
+                  <input type="number" id="inputHaircuts" class="custom-input" min="0" max="32767"
+                    placeholder="e.g. 40">
+                  <span class="input-hint">Salon visit counter</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="inputCurrentCar">Active Car Index</label>
+                  <input type="number" id="inputCurrentCar" class="custom-input" min="0" max="255"
+                    placeholder="e.g. 0">
+                  <span class="input-hint">Slot index of equipped car</span>
+                </div>
+              </div>
+
+              <div class="form-group-checkbox" style="margin-top: 1rem; display: flex; align-items: center; gap: 0.6rem;">
+                <input type="checkbox" id="inputHasBeenMillionaire" class="custom-checkbox">
+                <label for="inputHasBeenMillionaire" style="cursor: pointer; font-size: 0.9rem;">
+                  <strong>Milestone Achievement:</strong> Has Been Millionaire
+                </label>
               </div>
 
               <div class="form-actions">
@@ -868,6 +910,114 @@
             </div>
           </div>
 
+        </div>
+      </section>
+
+      <!-- ==================== TAB 6: RAW TREE EDITOR ==================== -->
+      <section class="tab-pane" id="tab-raw-tree">
+        <div class="pipeline-banner">
+          <div class="banner-title">Raw XMBF Binary Tree Inspector & In-Place Node Mutator</div>
+          <div class="banner-body">
+            Directly browse, filter, and inspect every node within the decrypted XMBF hierarchy.
+            Edits are applied directly in memory with 100% byte fidelity, verified via in-RAM cryptographic round-trip before atomic commit.
+          </div>
+        </div>
+
+        <div class="raw-tree-layout">
+          <!-- Left Column: Tree Explorer & Search -->
+          <div class="glass-card raw-tree-card">
+            <div class="raw-tree-header">
+              <div class="raw-search-box">
+                <input type="text" id="rawTreeSearchInput" class="custom-input" placeholder="Search node names (e.g. Money, VIN, Dirt, Level)...">
+                <button class="btn btn-sm btn-primary" id="btnRawTreeSearch">Search</button>
+                <button class="btn btn-sm btn-secondary" id="btnRawTreeReset">Reset</button>
+              </div>
+            </div>
+
+            <!-- Search Results Dropdown/List (Visible when search active) -->
+            <div class="raw-search-results" id="rawSearchResults" style="display: none;">
+              <div class="raw-search-results-header">
+                <span id="rawSearchCount">0 matches found</span>
+                <button class="btn btn-xs btn-outline" id="btnCloseSearchResults">Close Search</button>
+              </div>
+              <div class="raw-search-results-list" id="rawSearchResultsList"></div>
+            </div>
+
+            <!-- Hierarchical Tree Container -->
+            <div class="raw-tree-container" id="rawTreeContainer">
+              <div class="tree-loading-notice">Load a profile above to browse the XMBF document tree.</div>
+            </div>
+          </div>
+
+          <!-- Right Column: Selected Node Inspector -->
+          <div class="glass-card raw-inspector-card" id="rawInspectorPanel">
+            <div class="card-header">
+              <h3>Node Inspector</h3>
+              <span class="badge" id="rawInspectorKindBadge">No Selection</span>
+            </div>
+
+            <div class="inspector-body" id="rawInspectorEmpty">
+              <div class="empty-state-text" style="padding: 3rem 1rem; text-align: center; color: var(--text-dim);">
+                Select any node from the tree on the left to inspect its type descriptor, byte offset, allocated capacity, and scalar value.
+              </div>
+            </div>
+
+            <div class="inspector-body" id="rawInspectorContent" style="display: none;">
+              <div class="inspector-meta-grid">
+                <div class="meta-item">
+                  <span class="meta-label">NODE NAME</span>
+                  <span class="meta-val font-mono" id="rawMetaName">--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">TYPE DESCRIPTOR</span>
+                  <span class="meta-val font-mono" id="rawMetaType">--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">BYTE OFFSET</span>
+                  <span class="meta-val font-mono" id="rawMetaOffset">--</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">BOUNDS / CAPACITY</span>
+                  <span class="meta-val font-mono" id="rawMetaBounds">--</span>
+                </div>
+              </div>
+
+              <div class="meta-item meta-path-row" style="margin-top: 0.8rem;">
+                <span class="meta-label">FULL PATH</span>
+                <span class="meta-val font-mono meta-path-text" id="rawMetaPath">--</span>
+              </div>
+
+              <!-- Scalar Value Editor (For prim and str nodes) -->
+              <div class="raw-editor-block" id="rawScalarEditBlock" style="display: none; margin-top: 1.5rem;">
+                <div class="form-group">
+                  <label for="rawNodeInput" id="rawNodeInputLabel">Mutate Value (In-Place)</label>
+                  <input type="text" id="rawNodeInput" class="custom-input font-mono" placeholder="Enter new value">
+                  <span class="input-hint" id="rawNodeInputHint">Type-validated and bounds-checked before byte packing.</span>
+                </div>
+                <button type="button" class="btn btn-gold btn-md" id="btnApplyNodeValue" style="margin-top: 0.8rem;">
+                  Apply In-Place Mutation
+                </button>
+              </div>
+
+              <!-- Children Preview (For struct and array nodes) -->
+              <div class="raw-container-block" id="rawContainerBlock" style="display: none; margin-top: 1.5rem;">
+                <h4>Immediate Children (<span id="rawChildCount">0</span>)</h4>
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto; margin-top: 0.5rem;">
+                  <table class="raw-children-table">
+                    <thead>
+                      <tr>
+                        <th>Child Name</th>
+                        <th>Kind</th>
+                        <th>Type</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody id="rawChildrenTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

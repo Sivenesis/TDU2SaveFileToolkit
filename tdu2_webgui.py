@@ -50,6 +50,7 @@ loaded_save_state = {
     "raw_xmbf": None,
     "root_name": None,
     "data_dict": None,
+    "session": None,
     "is_live_documents": False,
     "last_backup_path": None
 }
@@ -156,6 +157,7 @@ def resolve_house_info(house_hc: int, slot_count: int = 0) -> dict:
 def create_operation_backup(source_path: Path, profile_name: str, operation: str = "Edit") -> Path:
     """
     Creates an organized, timestamped backup in the dedicated Backups/<Profile>/ directory.
+    Preserves backwards compatibility: creates both timestamped directory snapshot and .bak file.
     Pattern: <Profile>_DATA_<Operation>_<YYYYMMDD_HHMMSS>.bak
     """
     source_p = Path(source_path)
@@ -172,6 +174,20 @@ def create_operation_backup(source_path: Path, profile_name: str, operation: str
     backup_path = prof_backup_dir / backup_filename
 
     shutil.copy2(source_p, backup_path)
+
+    # Also create a directory snapshot if PLAYERSAVE folder exists or save container folder present
+    playersave_dir = source_p.parent
+    is_playersave = (playersave_dir.name.upper() == 'PLAYERSAVE') or (playersave_dir / 'DATA').is_file()
+    if is_playersave and playersave_dir.is_dir():
+        snapshot_dir = prof_backup_dir / f"{timestamp}_{op_clean}_PLAYERSAVE"
+        try:
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            for f in playersave_dir.iterdir():
+                if f.is_file() and not f.name.endswith('.tmp'):
+                    shutil.copy2(f, snapshot_dir / f.name)
+        except Exception:
+            pass
+
     # Also create a quick .bak in save folder for legacy compatibility
     try:
         shutil.copy2(source_p, source_p.with_suffix('.bak'))
@@ -185,6 +201,7 @@ def create_operation_backup(source_path: Path, profile_name: str, operation: str
 def get_profile_backups_list(profile_name: str) -> list:
     """
     Returns a sorted list of backups for the specified profile from the Backups/<Profile> folder.
+    Supports both legacy .bak files and snapshot directories.
     """
     if not profile_name:
         return []
@@ -194,7 +211,6 @@ def get_profile_backups_list(profile_name: str) -> list:
     if prof_dir.is_dir():
         for b_file in prof_dir.glob("*.bak"):
             stat = b_file.stat()
-            # Extract operation from filename: <Profile>_DATA_<Operation>_<Timestamp>.bak
             parts = b_file.stem.split('_')
             operation = "Backup"
             if len(parts) >= 4 and parts[1] == 'DATA':
@@ -203,12 +219,30 @@ def get_profile_backups_list(profile_name: str) -> list:
             backups.append({
                 "filename": b_file.name,
                 "operation": operation,
+                "is_snapshot": False,
                 "path": str(b_file.resolve()),
                 "size": stat.st_size,
                 "size_formatted": f"{round(stat.st_size / 1024, 1)} KB",
                 "timestamp": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                 "mtime": stat.st_mtime
             })
+
+        for s_dir in prof_dir.iterdir():
+            if s_dir.is_dir() and 'PLAYERSAVE' in s_dir.name:
+                stat = s_dir.stat()
+                parts = s_dir.name.split('_')
+                operation = parts[1] if len(parts) >= 3 else "Snapshot"
+                total_sz = sum(f.stat().st_size for f in s_dir.glob('*') if f.is_file())
+                backups.append({
+                    "filename": f"[Folder] {s_dir.name}",
+                    "operation": f"Full Snapshot ({operation})",
+                    "is_snapshot": True,
+                    "path": str(s_dir.resolve()),
+                    "size": total_sz,
+                    "size_formatted": f"{round(total_sz / 1024, 1)} KB",
+                    "timestamp": datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "mtime": stat.st_mtime
+                })
 
     # Sort descending by modification time (newest first)
     backups.sort(key=lambda x: x["mtime"], reverse=True)
@@ -696,9 +730,20 @@ def extract_save_summary(data_obj, prof_name, source_path):
     if casino_pts == 0 and driver.get('NbCoupon', 0) > 0:
         casino_pts = driver.get('NbCoupon', 0)
 
+    # Determine string capacity for driver name if session active
+    name_cap = len(driver.get('Name', '').encode('utf-8'))
+    if loaded_save_state.get("session") and loaded_save_state["session"].tree:
+        try:
+            dn_node = loaded_save_state["session"].tree.path('Driver', 'Name')
+            if dn_node:
+                name_cap = dn_node.string_capacity()
+        except Exception:
+            pass
+
     return {
         "profile_name": prof_name,
         "driver_name": driver.get('Name') or prof_name,
+        "name_capacity": name_cap,
         "source_path": str(source_path),
         "is_live_documents": is_live,
         "online_status": {
@@ -710,6 +755,10 @@ def extract_save_summary(data_obj, prof_name, source_path):
         },
         "money": driver.get('Money', 0),
         "casino_points": casino_pts,
+        "odometer_kms": round(float(driver.get('OdometerKms', 0.0)), 2),
+        "haircuts": int(driver.get('NbHaircuts', 0)),
+        "has_been_millionaire": bool(driver.get('HasBeenMillionaire', False)),
+        "current_car": int(driver.get('CurrentCar', 0)),
         "overall_level": calculate_player_level(data_obj),
         "levels": {
             "racing": levels.get('RacingLevel', 0),
@@ -795,6 +844,13 @@ def load_save_file(target_path_str, profile_name_override=None):
     except Exception:
         pass
 
+    try:
+        parent_root = data_file.parent.parent if data_file.parent.name.upper() == 'PLAYERSAVE' else data_file.parent
+        session = core.Session(parent_root, prof_name, data_file.name)
+    except Exception as e:
+        print(f"[!] Warning initializing Session: {e}")
+        session = None
+
     loaded_save_state = {
         "source_path": str(data_file),
         "profile_name": prof_name,
@@ -803,6 +859,7 @@ def load_save_file(target_path_str, profile_name_override=None):
         "raw_xmbf": xmbf_bytes,
         "root_name": root_name,
         "data_dict": data_obj,
+        "session": session,
         "is_live_documents": is_live,
         "last_backup_path": None
     }
@@ -952,6 +1009,126 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_json({"success": True, "state": state})
             except Exception as e:
                 self.send_error_json(f"Failed to get progression state: {e}")
+            return
+
+        # --- API: RAW XMBF TREE & SEARCH ---
+        elif path == '/api/raw-tree':
+            session = loaded_save_state.get("session")
+            if not session and loaded_save_state.get("source_path"):
+                sp = Path(loaded_save_state["source_path"])
+                pr = sp.parent.parent if sp.parent.name.upper() == 'PLAYERSAVE' else sp.parent
+                try:
+                    session = core.Session(pr, loaded_save_state["profile_name"], sp.name)
+                    loaded_save_state["session"] = session
+                except Exception as e:
+                    self.send_error_json(f"Cannot initialize save session: {e}")
+                    return
+
+            if not session or not session.tree:
+                self.send_error_json("No save loaded. Please load a profile first.")
+                return
+
+            query_params = parse_qs(parsed.query)
+            search_query = query_params.get('search', [''])[0].strip().lower()
+
+            if search_query:
+                matches = []
+                def search_tree(n, prefix=''):
+                    cur_p = f"{prefix}/{n.name}" if prefix else n.name
+                    if search_query in n.name.lower():
+                        val = None
+                        if n.kind in ('prim', 'str'):
+                            try:
+                                val = n.get()
+                            except Exception:
+                                val = None
+                        matches.append({
+                            "name": n.name,
+                            "path": cur_p,
+                            "kind": n.kind,
+                            "type_name": n.type_name,
+                            "has_children": n.is_container and len(n) > 0,
+                            "value": val
+                        })
+                        if len(matches) >= 150:
+                            return
+                    if n.is_container:
+                        for c in n.children():
+                            search_tree(c, cur_p)
+                            if len(matches) >= 150:
+                                return
+
+                search_tree(session.tree, '')
+                self.send_json({"success": True, "matches": matches, "results": matches, "count": len(matches)})
+                return
+
+            req_path = query_params.get('path', [''])[0].strip()
+            norm_path = req_path.replace('.', '/')
+            if not norm_path or norm_path == session.tree.name:
+                target_node = session.tree
+                base_path = session.tree.name
+            else:
+                parts = norm_path.split('/')
+                target_node = session.tree
+                if parts and parts[0] == session.tree.name:
+                    parts = parts[1:]
+                for p in parts:
+                    if p:
+                        target_node = target_node.child(p)
+                        if target_node is None:
+                            break
+                base_path = req_path
+
+            if target_node is None:
+                self.send_error_json(f"Node at path '{req_path}' not found.")
+                return
+
+            items = []
+            if target_node.is_container:
+                for c in target_node.children():
+                    c_path = f"{base_path}/{c.name}"
+                    val = None
+                    cap = None
+                    val_range = None
+                    if c.kind in ('prim', 'str'):
+                        try:
+                            val = c.get()
+                        except Exception:
+                            val = None
+                    if c.kind == 'str':
+                        cap = c.string_capacity()
+                    elif c.kind == 'prim' and c.ntype in core._RANGE:
+                        val_range = list(core._RANGE[c.ntype])
+
+                    items.append({
+                        "name": c.name,
+                        "path": c_path,
+                        "kind": c.kind,
+                        "type_name": c.type_name,
+                        "has_children": c.is_container and len(c) > 0,
+                        "child_count": len(c) if c.is_container else 0,
+                        "value": val,
+                        "capacity": cap,
+                        "range": val_range,
+                        "off": c.off
+                    })
+
+            self.send_json({
+                "success": True,
+                "path": req_path or session.tree.name,
+                "node": {
+                    "name": target_node.name,
+                    "path": req_path or session.tree.name,
+                    "kind": target_node.kind,
+                    "type_name": target_node.type_name,
+                    "off": target_node.off,
+                    "child_count": len(target_node) if target_node.is_container else 0,
+                    "value": target_node.get() if target_node.kind in ('prim', 'str') else None,
+                    "capacity": target_node.string_capacity() if target_node.kind == 'str' else None,
+                    "range": list(core._RANGE[target_node.ntype]) if target_node.kind == 'prim' and target_node.ntype in core._RANGE else None
+                },
+                "children": items
+            })
             return
 
         # --- STATIC ASSETS ---
@@ -1183,42 +1360,87 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
 
         # --- DIRECT PROFILE EDITING (TAB 1) ---
         elif path == '/api/edit-profile':
-            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
 
             try:
                 save_path = Path(loaded_save_state["source_path"])
-                data_obj = loaded_save_state["data_dict"]
                 prof_name = loaded_save_state["profile_name"]
-                footer = loaded_save_state["footer"]
-                target_fname = loaded_save_state["target_filename"]
-                raw_xmbf = loaded_save_state["raw_xmbf"]
-                root_name = loaded_save_state["root_name"]
 
-                # 1. Automatic safety backup
-                bak_path = create_operation_backup(save_path, prof_name, "ProfileEdit")
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
 
-                # 2. Straight numeric updates (level editing temporarily disabled - WIP)
-                data_obj, msg = core.edit_player_profile(
-                    data_obj,
-                    money=payload.get('money'),
-                    casino_points=payload.get('casino_points')
-                )
+                driver_node = session.tree.child('Driver')
+                if not driver_node:
+                    raise ValueError("Could not locate Driver in save data.")
 
-                # 3. Encrypt and save
-                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
-                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
+                messages = []
+                if 'money' in payload and payload['money'] is not None:
+                    m_val = int(payload['money'])
+                    driver_node.child('Money').set(m_val)
+                    messages.append(f"Money: ${m_val:,}")
 
-                core.atomic_write(save_path, enc_save)
+                if 'casino_points' in payload and payload['casino_points'] is not None:
+                    cp_val = int(payload['casino_points'])
+                    nb_c = driver_node.child('NbCoupon')
+                    if nb_c:
+                        nb_c.set(cp_val)
+                    cas_node = session.tree.child('Casino')
+                    if cas_node and cas_node.child('money'):
+                        cas_node.child('money').set(cp_val)
+                    messages.append(f"Casino Points: {cp_val:,} Cp")
 
-                loaded_save_state["raw_xmbf"] = new_xmbf
-                summary = extract_save_summary(data_obj, prof_name, save_path)
+                if 'odometer_kms' in payload and payload['odometer_kms'] is not None:
+                    odo_val = float(payload['odometer_kms'])
+                    odo_node = driver_node.child('OdometerKms')
+                    if odo_node:
+                        odo_node.set(odo_val)
+                        messages.append(f"Odometer: {odo_val:.1f} km")
 
+                if 'haircuts' in payload and payload['haircuts'] is not None:
+                    hc_val = int(payload['haircuts'])
+                    hc_node = driver_node.child('NbHaircuts')
+                    if hc_node:
+                        hc_node.set(hc_val)
+                        messages.append(f"Haircuts: {hc_val}")
+
+                if 'has_been_millionaire' in payload and payload['has_been_millionaire'] is not None:
+                    mil_val = bool(payload['has_been_millionaire'])
+                    mil_node = driver_node.child('HasBeenMillionaire')
+                    if mil_node:
+                        mil_node.set(mil_val)
+                        messages.append(f"Millionaire: {mil_val}")
+
+                if 'current_car' in payload and payload['current_car'] is not None:
+                    cc_val = int(payload['current_car'])
+                    cc_node = driver_node.child('CurrentCar')
+                    if cc_node:
+                        cc_node.set(cc_val)
+                        messages.append(f"Current Car: {cc_val}")
+
+                if 'driver_name' in payload and payload['driver_name']:
+                    dn_val = str(payload['driver_name']).strip()
+                    dn_node = driver_node.child('Name')
+                    if dn_node:
+                        dn_node.set(dn_val)
+                        messages.append(f"Profile Name: {dn_val}")
+
+                bak_path_str = session.save(do_backup=True, backup_operation="ProfileEdit")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
+
+                msg = "Profile updated: " + ", ".join(messages) if messages else "Profile updated successfully."
                 self.send_json({
                     "success": True,
                     "message": msg,
-                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "backup_path": bak_path_str,
                     "summary": summary
                 })
             except Exception as e:
@@ -1227,44 +1449,46 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
 
         # --- UNLOCK CASINO FURNITURE (TAB 1) ---
         elif path in ('/api/unlock-casino-furniture', '/api/unlock-furniture'):
-            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
 
             try:
                 save_path = Path(loaded_save_state["source_path"])
-                data_obj = loaded_save_state["data_dict"]
                 prof_name = loaded_save_state["profile_name"]
-                footer = loaded_save_state["footer"]
-                target_fname = loaded_save_state["target_filename"]
-                raw_xmbf = loaded_save_state["raw_xmbf"]
-                root_name = loaded_save_state["root_name"]
 
-                bak_path = create_operation_backup(save_path, prof_name, "FurnitureUnlock")
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
 
+                root_name, data_obj = core.decode_xmbf_to_dict(bytes(session.doc.data))
                 data_obj, msg = core.unlock_all_furniture(data_obj)
+                new_xmbf = core.encode_dict_to_xmbf(bytes(session.doc.data), {root_name: data_obj}, root_name)
 
-                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
-                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
+                session.doc = core.XMBF(bytearray(new_xmbf))
+                session.tree = session.doc.root()
+                session.original = bytes(new_xmbf)
+                bak_path_str = session.save(do_backup=True, backup_operation="FurnitureUnlock")
 
-                core.atomic_write(save_path, enc_save)
-
-                loaded_save_state["raw_xmbf"] = new_xmbf
+                loaded_save_state["data_dict"] = data_obj
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
                 summary = extract_save_summary(data_obj, prof_name, save_path)
 
                 self.send_json({
                     "success": True,
                     "message": msg,
-                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "backup_path": bak_path_str,
                     "summary": summary
                 })
             except Exception as e:
                 self.send_error_json(f"Failed to unlock furniture: {e}")
             return
 
-        # --- SWAP CAR MODEL FROM CATALOG (TAB 2) ---
+        # --- SWAP CAR MODEL FROM CATALOG (TAB 3) ---
         elif path == '/api/swap-car-catalog':
-            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
 
@@ -1276,44 +1500,145 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 return
 
             try:
-                save_path = Path(loaded_save_state["source_path"])
-                data_obj = loaded_save_state["data_dict"]
-                prof_name = loaded_save_state["profile_name"]
-                footer = loaded_save_state["footer"]
-                target_fname = loaded_save_state["target_filename"]
-                raw_xmbf = loaded_save_state["raw_xmbf"]
-                root_name = loaded_save_state["root_name"]
-
                 slot_int = int(slot)
-                bak_path = create_operation_backup(save_path, prof_name, f"CarSwap_Slot{slot_int+1}")
+                arch_int = int(new_archetype)
 
-                core.swap_garage_car_archetype(data_obj, slot_int, int(new_archetype), CARS_DB)
+                if arch_int in core.BLOCKED_IDS:
+                    self.send_error_json(f"Vehicle Archetype #{arch_int} is blocked: ambient traffic models lack cockpit data and crash the engine.")
+                    return
 
-                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
-                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
 
-                core.atomic_write(save_path, enc_save)
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
 
-                loaded_save_state["raw_xmbf"] = new_xmbf
-                summary = extract_save_summary(data_obj, prof_name, save_path)
+                slots = core.garage_slots(session)
+                if not (0 <= slot_int < len(slots)):
+                    raise IndexError(f"Garage slot #{slot_int + 1} is out of bounds (1..{len(slots)}).")
 
-                car_entry = CARS_DB.get(str(new_archetype), {})
-                car_name = car_entry.get('name', f"Archetype #{new_archetype}")
+                target_slot = slots[slot_int]
+                core.set_vehicle(session, target_slot, arch_int, reset_look=True)
+                bak_path_str = session.save(do_backup=True, backup_operation=f"CarSwap_Slot{slot_int+1}")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
+
+                car_entry = CARS_DB.get(str(arch_int), {})
+                car_name = car_entry.get('name', f"Archetype #{arch_int}")
 
                 self.send_json({
                     "success": True,
                     "message": f"Successfully swapped Garage Slot #{slot_int + 1} to {car_name}",
                     "car_name": car_name,
-                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "backup_path": bak_path_str,
                     "summary": summary
                 })
             except Exception as e:
                 self.send_error_json(f"Failed to swap car: {e}")
             return
 
-        # --- TUNE / UPGRADE CAR (TAB 2) ---
+        # --- CLEAR / EMPTY GARAGE SLOT (TAB 3) ---
+        elif path == '/api/clear-slot':
+            if not loaded_save_state.get("source_path"):
+                self.send_error_json("No save file loaded. Please load a save first.")
+                return
+
+            slot = payload.get('slot')
+            if slot is None:
+                self.send_error_json("Parameter 'slot' is required.")
+                return
+
+            try:
+                slot_int = int(slot)
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
+
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
+
+                slots = core.garage_slots(session)
+                if not (0 <= slot_int < len(slots)):
+                    raise IndexError(f"Garage slot #{slot_int + 1} is out of bounds (1..{len(slots)}).")
+
+                target_slot = slots[slot_int]
+                core.clear_slot(session, target_slot)
+                bak_path_str = session.save(do_backup=True, backup_operation=f"ClearSlot_Slot{slot_int+1}")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
+
+                self.send_json({
+                    "success": True,
+                    "message": f"Cleared Garage Slot #{slot_int + 1} to empty stock specification.",
+                    "backup_path": bak_path_str,
+                    "summary": summary
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed to clear garage slot: {e}")
+            return
+
+        # --- BATCH PERFORMANCE UPGRADES (TAB 3) ---
+        elif path == '/api/set-upgrades':
+            if not loaded_save_state.get("source_path"):
+                self.send_error_json("No save file loaded. Please load a save first.")
+                return
+
+            slot = payload.get('slot')
+            level = payload.get('level') if payload.get('level') is not None else payload.get('stage')
+            if slot is None or level is None:
+                self.send_error_json("Parameters 'slot' and 'level' (or 'stage') are required.")
+                return
+
+            try:
+                slot_int = int(slot)
+                lvl_int = int(level)
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
+
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
+
+                slots = core.garage_slots(session)
+                if not (0 <= slot_int < len(slots)):
+                    raise IndexError(f"Garage slot #{slot_int + 1} is out of bounds (1..{len(slots)}).")
+
+                target_slot = slots[slot_int]
+                core.set_upgrades(target_slot, lvl_int)
+                bak_path_str = session.save(do_backup=True, backup_operation=f"UpgradeStage{lvl_int}_Slot{slot_int+1}")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
+
+                stage_name = "Stock" if lvl_int == 0 else f"Stage {lvl_int}"
+                self.send_json({
+                    "success": True,
+                    "message": f"Set Garage Slot #{slot_int + 1} tuning to {stage_name}.",
+                    "backup_path": bak_path_str,
+                    "summary": summary
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed to set performance stage: {e}")
+            return
+
+        # --- TUNE / UPGRADE CAR (TAB 3) ---
         elif path == '/api/tune-car':
-            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
 
@@ -1328,48 +1653,56 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             braking = payload.get('braking')
 
             try:
-                save_path = Path(loaded_save_state["source_path"])
-                data_obj = loaded_save_state["data_dict"]
-                prof_name = loaded_save_state["profile_name"]
-                footer = loaded_save_state["footer"]
-                target_fname = loaded_save_state["target_filename"]
-                raw_xmbf = loaded_save_state["raw_xmbf"]
-                root_name = loaded_save_state["root_name"]
-
                 slot_int = int(slot)
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
+
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
+
+                slots = core.garage_slots(session)
+                if not (0 <= slot_int < len(slots)):
+                    raise IndexError(f"Garage slot #{slot_int + 1} is out of bounds (1..{len(slots)}).")
+
+                target_slot = slots[slot_int]
+                up = target_slot.f('Car Upgrades')
+                if up:
+                    if max_tune:
+                        for c in up.children():
+                            c.set(4)
+                    else:
+                        if accel is not None and up.child('Acceleration'):
+                            up.child('Acceleration').set(int(accel))
+                        if speed is not None and up.child('Top Speed'):
+                            up.child('Top Speed').set(int(speed))
+                        if braking is not None and up.child('Braking'):
+                            up.child('Braking').set(int(braking))
+
                 op_name = f"CarTuneMax_Slot{slot_int+1}" if max_tune else f"CarTune_Slot{slot_int+1}"
-                bak_path = create_operation_backup(save_path, prof_name, op_name)
+                bak_path_str = session.save(do_backup=True, backup_operation=op_name)
 
-                data_obj, msg = core.tune_garage_car(
-                    data_obj,
-                    slot_int,
-                    acceleration=accel,
-                    top_speed=speed,
-                    braking=braking,
-                    max_tune=max_tune
-                )
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
 
-                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
-                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
-
-                core.atomic_write(save_path, enc_save)
-
-                loaded_save_state["raw_xmbf"] = new_xmbf
-                summary = extract_save_summary(data_obj, prof_name, save_path)
-
+                msg = f"Max tuning stage 4 applied to Garage Slot #{slot_int + 1}" if max_tune else f"Tuning applied to Garage Slot #{slot_int + 1}"
                 self.send_json({
                     "success": True,
                     "message": msg,
-                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "backup_path": bak_path_str,
                     "summary": summary
                 })
             except Exception as e:
                 self.send_error_json(f"Failed to tune car: {e}")
             return
 
-        # --- CUSTOMIZE VEHICLE OPTIONS (TAB 2: COLOR, RIMS, INTERIOR) ---
+        # --- CUSTOMIZE VEHICLE OPTIONS (TAB 3: COLOR, RIMS, INTERIOR) ---
         elif path == '/api/customize-car':
-            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
 
@@ -1383,38 +1716,41 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
             interior_idx = payload.get('interior_indice')
 
             try:
-                save_path = Path(loaded_save_state["source_path"])
-                data_obj = loaded_save_state["data_dict"]
-                prof_name = loaded_save_state["profile_name"]
-                footer = loaded_save_state["footer"]
-                target_fname = loaded_save_state["target_filename"]
-                raw_xmbf = loaded_save_state["raw_xmbf"]
-                root_name = loaded_save_state["root_name"]
-
                 slot_int = int(slot)
-                bak_path = create_operation_backup(save_path, prof_name, f"CarCustomize_Slot{slot_int+1}")
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
 
-                data_obj, msg = core.customize_garage_car(
-                    data_obj,
-                    slot_int,
-                    paint_idx=paint_idx,
-                    rim_idx=rim_idx,
-                    interior_idx=interior_idx,
-                    cars_db=CARS_DB
-                )
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
 
-                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
-                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
+                slots = core.garage_slots(session)
+                if not (0 <= slot_int < len(slots)):
+                    raise IndexError(f"Garage slot #{slot_int + 1} is out of bounds (1..{len(slots)}).")
 
-                core.atomic_write(save_path, enc_save)
+                target_slot = slots[slot_int]
+                if paint_idx is not None and target_slot.f('PaintIndice'):
+                    target_slot.f('PaintIndice').set(int(paint_idx))
+                    if target_slot.f('PaintType'):
+                        target_slot.f('PaintType').set(0)
+                if rim_idx is not None and target_slot.f('RimIndice'):
+                    target_slot.f('RimIndice').set(int(rim_idx))
+                if interior_idx is not None and target_slot.f('InteriorIndice'):
+                    target_slot.f('InteriorIndice').set(int(interior_idx))
 
-                loaded_save_state["raw_xmbf"] = new_xmbf
-                summary = extract_save_summary(data_obj, prof_name, save_path)
+                bak_path_str = session.save(do_backup=True, backup_operation=f"CarCustomize_Slot{slot_int+1}")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
 
                 self.send_json({
                     "success": True,
-                    "message": msg,
-                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "message": f"Customization updated on Garage Slot #{slot_int + 1}",
+                    "backup_path": bak_path_str,
                     "summary": summary
                 })
             except Exception as e:
@@ -1516,9 +1852,9 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_error_json(f"Failed to apply preset: {e}")
             return
 
-        # --- SWAP POSITIONS BETWEEN SLOTS (TAB 2) ---
+        # --- SWAP POSITIONS BETWEEN SLOTS (TAB 3) ---
         elif path == '/api/swap-slots':
-            if not loaded_save_state["data_dict"] or not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No save file loaded. Please load a save first.")
                 return
 
@@ -1530,38 +1866,118 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 return
 
             try:
-                save_path = Path(loaded_save_state["source_path"])
-                data_obj = loaded_save_state["data_dict"]
-                prof_name = loaded_save_state["profile_name"]
-                footer = loaded_save_state["footer"]
-                target_fname = loaded_save_state["target_filename"]
-                raw_xmbf = loaded_save_state["raw_xmbf"]
-                root_name = loaded_save_state["root_name"]
-
                 a_int, b_int = int(slot_a), int(slot_b)
-                bak_path = create_operation_backup(save_path, prof_name, f"SwapSlots_{a_int+1}_{b_int+1}")
+                if a_int == b_int:
+                    raise ValueError("Cannot swap a slot with itself.")
 
-                core.swap_garage_slots(data_obj, a_int, b_int)
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
 
-                new_xmbf = core.encode_dict_to_xmbf(raw_xmbf, {root_name: data_obj}, root_name)
-                enc_save = core.encrypt_save_file(new_xmbf, prof_name, target_fname, footer)
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
 
-                core.atomic_write(save_path, enc_save)
+                slots = core.garage_slots(session)
+                if not (0 <= a_int < len(slots)):
+                    raise IndexError(f"Slot A index {a_int} out of bounds.")
+                if not (0 <= b_int < len(slots)):
+                    raise IndexError(f"Slot B index {b_int} out of bounds.")
 
-                loaded_save_state["raw_xmbf"] = new_xmbf
-                summary = extract_save_summary(data_obj, prof_name, save_path)
+                slot_a_obj = slots[a_int]
+                slot_b_obj = slots[b_int]
+
+                car_a_off = session.doc.base + slot_a_obj.car.off
+                car_b_off = session.doc.base + slot_b_obj.car.off
+                hdr = session.doc.T[slot_a_obj.car.tid]
+                car_size = (hdr >> 15) & 0x1ffff
+
+                temp_car = bytes(session.doc.data[car_a_off : car_a_off + car_size])
+                session.doc.data[car_a_off : car_a_off + car_size] = session.doc.data[car_b_off : car_b_off + car_size]
+                session.doc.data[car_b_off : car_b_off + car_size] = temp_car
+
+                slot_a_obj.car._ch = None
+                slot_b_obj.car._ch = None
+
+                driver_node = session.tree.child('Driver')
+                if driver_node and driver_node.child('CurrentCar'):
+                    cc = driver_node.child('CurrentCar').get()
+                    if cc == a_int:
+                        driver_node.child('CurrentCar').set(b_int)
+                    elif cc == b_int:
+                        driver_node.child('CurrentCar').set(a_int)
+
+                bak_path_str = session.save(do_backup=True, backup_operation=f"SwapSlots_{a_int+1}_{b_int+1}")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
 
                 self.send_json({
                     "success": True,
                     "message": f"Successfully swapped Garage Slot #{a_int + 1} with Slot #{b_int + 1}",
-                    "backup_path": str(bak_path.resolve()) if bak_path else None,
+                    "backup_path": bak_path_str,
                     "summary": summary
                 })
             except Exception as e:
                 self.send_error_json(f"Failed to swap slots: {e}")
             return
 
-        # --- CREATE MANUAL BACKUP (TAB 3) ---
+        # --- MUTATE RAW NODE VALUE IN-PLACE (TAB 6: RAW TREE) ---
+        elif path == '/api/raw-node/set':
+            if not loaded_save_state.get("source_path"):
+                self.send_error_json("No save file loaded. Please load a save first.")
+                return
+
+            try:
+                target_path = payload.get('path', '').strip()
+                raw_val = payload.get('value')
+                if not target_path:
+                    raise ValueError("Target node path is required.")
+
+                save_path = Path(loaded_save_state["source_path"])
+                prof_name = loaded_save_state["profile_name"]
+
+                session = loaded_save_state.get("session")
+                if not session:
+                    pr = save_path.parent.parent if save_path.parent.name.upper() == 'PLAYERSAVE' else save_path.parent
+                    session = core.Session(pr, prof_name, save_path.name)
+                    loaded_save_state["session"] = session
+
+                parts = target_path.replace('.', '/').split('/')
+                if parts and parts[0] == session.tree.name:
+                    parts = parts[1:]
+
+                node = session.tree
+                for p in parts:
+                    if p:
+                        node = node.child(p)
+                        if node is None:
+                            raise KeyError(f"Path component '{p}' not found in node tree.")
+
+                node.set(raw_val)
+                bak_path_str = session.save(do_backup=True, backup_operation="RawNodePatch")
+
+                root_name, new_dict = core.decode_xmbf_to_dict(bytes(session.doc.data))
+                loaded_save_state["data_dict"] = new_dict
+                loaded_save_state["raw_xmbf"] = bytes(session.doc.data)
+                summary = extract_save_summary(new_dict, prof_name, save_path)
+
+                self.send_json({
+                    "success": True,
+                    "message": f"Updated node '{node.name}' in-place.",
+                    "path": target_path,
+                    "new_value": node.get(),
+                    "backup_path": bak_path_str,
+                    "summary": summary
+                })
+            except Exception as e:
+                self.send_error_json(f"Failed to patch node in-place: {e}")
+            return
+
+        # --- CREATE MANUAL BACKUP (TAB 4) ---
         elif path == '/api/create-backup':
             if not loaded_save_state["source_path"]:
                 self.send_error_json("No save file loaded.")
@@ -1583,9 +1999,9 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 self.send_error_json(f"Failed to create backup: {e}")
             return
 
-        # --- RESTORE BACKUP (TAB 3) ---
+        # --- RESTORE BACKUP (TAB 4) ---
         elif path == '/api/restore-backup':
-            if not loaded_save_state["source_path"]:
+            if not loaded_save_state.get("source_path"):
                 self.send_error_json("No active save file loaded.")
                 return
 
@@ -1600,7 +2016,6 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                 else:
                     cand_p = cand_p.resolve()
 
-                # Strictly verify containment within BACKUPS_DIR
                 try:
                     cand_p.relative_to(BACKUPS_DIR.resolve())
                     bak_path = cand_p
@@ -1608,20 +2023,24 @@ class TDU2WebHandler(BaseHTTPRequestHandler):
                     self.send_error_json("Access denied: Backup path must reside within the Backups directory.", status_code=400)
                     return
             else:
-                # Default to nearest .bak in save directory
                 bak_path = save_path.with_suffix('.bak')
 
-            if not bak_path.is_file():
-                self.send_error_json(f"Backup file not found at: {bak_path}")
+            if not bak_path.exists():
+                self.send_error_json(f"Backup target not found at: {bak_path}")
                 return
 
             try:
-                # Safety backup of current state before restore
                 create_operation_backup(save_path, prof_name, "PreRestore")
 
-                core.atomic_write(save_path, bak_path.read_bytes())
-                summary = load_save_file(str(save_path), prof_name)
+                if bak_path.is_dir():
+                    playersave_dir = save_path.parent
+                    for src_f in bak_path.iterdir():
+                        if src_f.is_file():
+                            shutil.copy2(src_f, playersave_dir / src_f.name)
+                else:
+                    core.atomic_write(save_path, bak_path.read_bytes())
 
+                summary = load_save_file(str(save_path), prof_name)
                 self.send_json({
                     "success": True,
                     "message": f"Successfully restored backup from {bak_path.name}",
